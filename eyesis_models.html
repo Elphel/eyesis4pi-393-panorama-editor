@@ -1,0 +1,754 @@
+<html>
+
+<head>
+<title>Eyesis Camera Model</title>
+<meta http-equiv="content-type" content="text/html; charset=ISO-8859-1"> 
+
+
+<script type="text/javascript" src="sylvester.js"></script>
+<script type="text/javascript" src="glUtils.js"></script>
+
+<script id="shader-fs" type="x-shader/x-fragment">
+  #ifdef GL_ES
+  precision highp float;
+  #endif
+
+  varying vec2 vTextureCoord;
+  varying vec3 vLightWeighting;
+
+  uniform float uAlpha; // for blending
+
+  uniform sampler2D uSampler;
+
+  void main(void) {
+    vec4 textureColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+//    gl_FragColor = vec4(textureColor.rgb * vLightWeighting, textureColor.a);
+     gl_FragColor = vec4(textureColor.rgb * vLightWeighting, textureColor.a * uAlpha);
+
+  }
+</script>
+
+<script id="shader-vs" type="x-shader/x-vertex">
+  attribute vec3 aVertexPosition;
+  attribute vec3 aVertexNormal;
+  attribute vec2 aTextureCoord;
+
+  uniform mat4 uMVMatrix;
+  uniform mat4 uPMatrix;
+  uniform mat4 uNMatrix;
+
+  uniform vec3 uAmbientColor; ////
+
+  uniform vec3 uLightingDirection; ////
+  uniform vec3 uDirectionalColor; ////
+
+  uniform bool uUseLighting;  ////
+
+  varying vec2 vTextureCoord;
+  varying vec3 vLightWeighting;
+
+  void main(void) {
+    gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+    vTextureCoord = aTextureCoord;
+    if (!uUseLighting) {////
+      vLightWeighting = vec3(1.0, 1.0, 1.0);////
+    } else {////
+      vec4 transformedNormal = uNMatrix * vec4(aVertexNormal, 1.0);////
+      float directionalLightWeighting = max(dot(transformedNormal.xyz, uLightingDirection), 0.0);////
+      vLightWeighting = uAmbientColor + uDirectionalColor * directionalLightWeighting;////
+    }////
+  }
+</script>
+
+
+<script type="text/javascript">
+
+  var gl;
+  function initGL(canvas) {
+    try {
+      gl = canvas.getContext("experimental-webgl");
+      gl.viewportWidth = canvas.width;
+      gl.viewportHeight = canvas.height;
+    } catch(e) {
+    }
+    if (!gl) {
+      alert("Could not initialise WebGL, sorry :-(");
+    }
+  }
+
+
+  function getShader(gl, id) {
+    var shaderScript = document.getElementById(id);
+    if (!shaderScript) {
+      return null;
+    }
+
+    var str = "";
+    var k = shaderScript.firstChild;
+    while (k) {
+      if (k.nodeType == 3) {
+        str += k.textContent;
+      }
+      k = k.nextSibling;
+    }
+
+    var shader;
+    if (shaderScript.type == "x-shader/x-fragment") {
+      shader = gl.createShader(gl.FRAGMENT_SHADER);
+    } else if (shaderScript.type == "x-shader/x-vertex") {
+      shader = gl.createShader(gl.VERTEX_SHADER);
+    } else {
+      return null;
+    }
+
+    gl.shaderSource(shader, str);
+    gl.compileShader(shader);
+
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      alert(gl.getShaderInfoLog(shader));
+      return null;
+    }
+
+    return shader;
+  }
+
+
+  var shaderProgram;
+  function initShaders() {
+    var fragmentShader = getShader(gl, "shader-fs");
+    var vertexShader = getShader(gl, "shader-vs");
+
+    shaderProgram = gl.createProgram();
+    gl.attachShader(shaderProgram, vertexShader);
+    gl.attachShader(shaderProgram, fragmentShader);
+    gl.linkProgram(shaderProgram);
+
+    if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+      alert("Could not initialise shaders");
+    }
+
+    gl.useProgram(shaderProgram);
+
+    shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+    gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+
+    shaderProgram.textureCoordAttribute = gl.getAttribLocation(shaderProgram, "aTextureCoord");
+    gl.enableVertexAttribArray(shaderProgram.textureCoordAttribute);
+
+    shaderProgram.vertexNormalAttribute = gl.getAttribLocation(shaderProgram, "aVertexNormal");
+    gl.enableVertexAttribArray(shaderProgram.vertexNormalAttribute);
+
+    shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, "uPMatrix");
+    shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
+    shaderProgram.nMatrixUniform = gl.getUniformLocation(shaderProgram, "uNMatrix");
+    shaderProgram.samplerUniform = gl.getUniformLocation(shaderProgram, "uSampler");
+    shaderProgram.alphaUniform = gl.getUniformLocation(shaderProgram, "uAlpha");
+
+
+    shaderProgram.useLightingUniform = gl.getUniformLocation(shaderProgram, "uUseLighting"); ////
+    shaderProgram.ambientColorUniform = gl.getUniformLocation(shaderProgram, "uAmbientColor"); ////
+    shaderProgram.lightingDirectionUniform = gl.getUniformLocation(shaderProgram, "uLightingDirection"); ////
+    shaderProgram.directionalColorUniform = gl.getUniformLocation(shaderProgram, "uDirectionalColor"); ////
+
+
+  }
+
+
+  function handleLoadedTexture(texture) {
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, texture.image);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+
+
+  var eyesisTextureSrc =[ "eyesis.jpeg","eyesis_grey.jpeg","eyesis_selected.jpeg"];
+  var eyesisTexture = Array(eyesisTextureSrc.length);
+
+  function initTexture() {
+     initEyesisTexture();
+  }
+  
+
+function initEyesisTexture() {
+    for (var i=0;i<eyesisTextureSrc.length;i++) {
+      eyesisTexture[i] = gl.createTexture();
+      eyesisTexture[i].image = new Image();
+      eyesisTexture[i].image.index = i;
+      eyesisTexture[i].image.onload = function() {
+        handleLoadedTexture(eyesisTexture[this.index])
+      }
+      eyesisTexture[i].image.src = eyesisTextureSrc[i];
+    }
+  }
+
+
+  var mvMatrix;
+  var mvMatrixStack = [];
+
+  function mvPushMatrix(m) {
+    if (m) {
+      mvMatrixStack.push(m.dup());
+      mvMatrix = m.dup();
+    } else {
+      mvMatrixStack.push(mvMatrix.dup());
+    }
+  }
+
+  function mvPopMatrix() {
+    if (mvMatrixStack.length == 0) {
+      throw "Invalid popMatrix!";
+    }
+    mvMatrix = mvMatrixStack.pop();
+    return mvMatrix;
+  }
+
+  function loadIdentity() {
+    mvMatrix = Matrix.I(4);
+  }
+
+
+  function multMatrix(m) {
+    mvMatrix = mvMatrix.x(m);
+  }
+
+
+  function mvTranslate(v) {
+    var m = Matrix.Translation($V([v[0], v[1], v[2]])).ensure4x4();
+    multMatrix(m);
+  }
+
+
+  function createRotationMatrix(angle, v) {
+    var arad = angle * Math.PI / 180.0;
+    return Matrix.Rotation(arad, $V([v[0], v[1], v[2]])).ensure4x4();
+  }
+
+
+  function mvRotate(angle, v) {
+    multMatrix(createRotationMatrix(angle, v));
+  }
+
+
+  var pMatrix;
+  function perspective(fovy, aspect, znear, zfar) {
+    pMatrix = makePerspective(fovy, aspect, znear, zfar);
+  }
+
+
+  function setMatrixUniforms() {
+    gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, new Float32Array(pMatrix.flatten()));
+    gl.uniformMatrix4fv(shaderProgram.mvMatrixUniform, false, new Float32Array(mvMatrix.flatten()));
+
+    var normalMatrix = mvMatrix.inverse();
+    normalMatrix = normalMatrix.transpose();
+    gl.uniformMatrix4fv(shaderProgram.nMatrixUniform, false, new Float32Array(normalMatrix.flatten()));
+  }
+
+
+  var mouseDown = false;
+  var lastMouseX = null;
+  var lastMouseY = null;
+
+  var eyesisRotationMatrix = Matrix.I(4);
+
+  function handleMouseDown(event) {
+    mouseDown = true;
+    lastMouseX = event.clientX;
+    lastMouseY = event.clientY;
+  }
+
+
+  function handleMouseUp(event) {
+    mouseDown = false;
+  }
+
+
+  function handleMouseMove(event) {
+    if (!mouseDown) {
+      return;
+    }
+    var newX = event.clientX;
+    var newY = event.clientY;
+
+    var deltaX = newX - lastMouseX
+    var newRotationMatrix = createRotationMatrix(deltaX / 10, [0, 1, 0]);
+
+    var deltaY = newY - lastMouseY;
+    newRotationMatrix = newRotationMatrix.x(createRotationMatrix(deltaY / 10, [1, 0, 0]));
+
+    eyesisRotationMatrix = newRotationMatrix.x(eyesisRotationMatrix);
+
+    lastMouseX = newX
+    lastMouseY = newY;
+  }
+
+  function initBuffers() {
+     initBuffersEyesis();
+  }
+
+
+  var eyesisVertexPositionBuffer;
+  var eyesisVertexNormalBuffer;
+  var eyesisVertexTextureCoordBuffer;
+  var eyesisVertexIndexBuffer;
+  function initBuffersEyesis() {
+    var divs=8;     // 2 - shade separator (21mm), 6 - hole (60mm) for each camera
+    var subDivs=4; //8; //2;  // subdivide each unit (see above) for smooth cylinder
+    var symmetry=8; // number of camera modules
+    var allDivs=subDivs*divs;
+    var scale =0.001; // mm/m
+    var cavityIndex=20; // 9; // next 6
+    var cavityHeight=22; //5; // (not counting points on the edge
+    var angleFin=0.01; //half angle thickness of a fin, radians
+    var deltaR1=2; // outer shade walls
+    var deltaR2=45;// distance to side filters from the outer shade
+    var topBottomThickness=2;
+    var cavityLong= subDivs+1; // +/-
+    var cylinderPoints = [ // axis, radius
+         70.625,0,      // 0
+         70.625,40,     // 1
+          70.625,40,    // 2
+         40.75, 40,     // 3
+          40.75,40,     // 4
+         40.75, 55,     // 5
+          40.75,55,     // 6
+         79.25, 55,     // 7
+          79.25,55,     // 8
+         79.25, 50,     // 9 
+          79.25,50,     //10
+         80.75, 50,     //11
+          80.75,50,     //12
+         80.75,62.6,    //13 
+          80.75,62.6,   //14 
+         59.5,  62.6,   //15
+          59.5, 62.6,   //16
+         59.5,  105,    //17
+          59.5, 105,    //18
+         46.5,  105,    //19
+         30,    105,  // needed for the side lens cavity 18
+         25,    105,  // needed for the side lens cavity 19
+         20,    105,  // needed for the side lens cavity 20
+                      // extra divisions to increase the size of the lens part
+         16,    105,  // needed for the side lens cavity 21
+         14,    105,  // needed for the side lens cavity 22
+         12,    105,  // needed for the side lens cavity 23
+         10,    105,  // needed for the side lens cavity 24
+          8,    105,  // needed for the side lens cavity 25
+          6,    105,  // needed for the side lens cavity 26
+          4,    105,  // needed for the side lens cavity 27
+          2,    105,  // needed for the side lens cavity 28
+          0,    105,  // needed for the side lens cavity 29
+         -2,    105,  // needed for the side lens cavity 30
+         -4,    105,  // needed for the side lens cavity 31
+         -6,    105,  // needed for the side lens cavity 32
+         -8,    105,  // needed for the side lens cavity 33
+        -10,    105,  // needed for the side lens cavity 34
+        -12,    105,  // needed for the side lens cavity 35
+        -14,    105,  // needed for the side lens cavity 36
+        -16,    105,  // needed for the side lens cavity 37
+
+        -20,    105,  // needed for the side lens cavity 38
+        -25,    105,  // needed for the side lens cavity 39
+        -30,    105,  // needed for the side lens cavity 40
+        -47.5,  105,  // 41
+        -61.5,  105,  // 42
+         -61.5, 105,  // 43
+        -61.5,  54.1, // 44
+         -61.5, 54.1, // 45
+       -168.95, 54.1, // 46
+        -168.95,54.1, // 47
+       -171.25, 56.4, // 48
+        -171.25,56.4, // 49
+       -184.25, 56.4, // 50
+        -184.25,56.4, // 51
+       -185.75, 59.5, // 52
+        -185.75,59.5, // 53
+       -191.25, 59.5, // 54
+        -191.25,59.5, // 55
+       -251.25, 32.5, // 56
+        -251.25,32.5, // 57
+       -251.25, 30.1625,//58
+        -251.25,30.1625,//59
+       -1000,   30.1625 //60 
+    ];
+
+    var latitudeBands = cylinderPoints.length/2-1;
+    var longitudeBands = allDivs*symmetry;
+    var vertexPositionData = [];
+    var textureCoordData = [];
+    for (var latNumber = 0; latNumber <= latitudeBands; latNumber++) {
+      var h0=cylinderPoints[2*latNumber]*scale;
+      var r0=cylinderPoints[2*latNumber+1]*scale;
+      var symLong;
+      for (var longNumber = 0; longNumber <= longitudeBands; longNumber++) {
+        var r=r0;
+        var h=h0;
+        var phi = longNumber * 2 * Math.PI / longitudeBands;
+        symLong= longNumber-allDivs*Math.floor(longNumber/allDivs);
+        if (symLong>(allDivs/2)) symLong=allDivs-symLong;
+        var v = 1 - (latNumber / latitudeBands);
+        var u = 1 - 2*(symLong / allDivs);
+
+        if ((latNumber>=cavityIndex) && (latNumber<= (cavityIndex+cavityHeight)) && (symLong>=cavityLong)) {
+          var longNum0=allDivs*Math.floor(longNumber/allDivs); // number of longitude steps till the beginning of this module
+          var longNum1=longNumber-longNum0; // number of longitude steps since the beginning of this module
+          var phi0 = longNum0 * 2 * Math.PI / longitudeBands; // angle at the beginning of this module
+          var phi0a=phi0+ (cavityLong-1)*2 * Math.PI / longitudeBands; // angle at the outer edge  of this module
+          var phi0b=phi0+angleFin;
+
+          var phi1 = (longNum0 + allDivs )* 2 * Math.PI / longitudeBands; // angle at the beginning of this module
+          var phi1a=phi1-(cavityLong-1)*2 * Math.PI / longitudeBands; // angle at the outer edge  of this module
+          var phi1b=phi1-angleFin;
+          if      (longNum1<=(cavityLong+1))          phi=phi0a;
+          else if (longNum1>=(allDivs-cavityLong-1))  phi=phi1a;
+          else if (longNum1==(cavityLong+2))          phi=phi0b;
+          else if (longNum1==(allDivs-cavityLong-2))  phi=phi1b;
+          else phi=phi0b+(phi1b-phi0b)*(longNum1-cavityLong-3)/(allDivs-2*cavityLong-6);
+          if ((symLong==cavityLong) || (latNumber== cavityIndex) || (latNumber==(cavityIndex+cavityHeight)))  r=r0;
+          else if ((symLong==(cavityLong+1)) || (symLong==(cavityLong+2) ||
+              (latNumber== (cavityIndex+1)) ||
+              (latNumber==(cavityIndex+2)) ||
+              (latNumber==(cavityIndex+cavityHeight-2)) ||
+              (latNumber==(cavityIndex+cavityHeight-1)))) r=r0-deltaR1*scale;
+          else r=r0-deltaR2*scale;
+          if       (latNumber<= (cavityIndex+1))                                   h=cylinderPoints[2*(cavityIndex-1)]*scale;
+          else if  (latNumber>= (cavityIndex+cavityHeight-1))                      h=cylinderPoints[2*(cavityIndex+cavityHeight+1)]*scale;
+          else if (latNumber== (cavityIndex+2))                                    h=(cylinderPoints[2*(cavityIndex-2)]-topBottomThickness)*scale;
+          else if (latNumber== (cavityIndex+cavityHeight-2))                       h=(cylinderPoints[2*(cavityIndex+cavityHeight+2)]+topBottomThickness)*scale;
+          else h= (((cylinderPoints[2*(cavityIndex-2)]-topBottomThickness)*scale)*              (cavityIndex+cavityHeight-3-latNumber)+
+                   ((cylinderPoints[2*(cavityIndex+cavityHeight+2)]+topBottomThickness)*scale)* (latNumber-(cavityIndex+3)))/(cavityHeight-6);
+        }
+        var sinPhi = Math.sin(phi);
+        var cosPhi = Math.cos(phi);
+        var x = cosPhi * r;
+        var y = h;
+        var z = sinPhi * r;
+        textureCoordData.push(u);
+        textureCoordData.push(v);
+        vertexPositionData.push(x);
+        vertexPositionData.push(y);
+        vertexPositionData.push(z);
+      }
+    }
+
+// Handling normalData - average normals connected to the vertex, proportionally to the angles of the triangles connected to it (if it is non-zero) 
+// even different - angle*area, so for the smooth rectangular mesh there will be the same contribution for the "90-degree" and a pair of the "45-degree" ones
+
+    var normalData = Array(vertexPositionData.length);
+    var normalMaxSize = Array(vertexPositionData.length/3);
+    for (var i=0;i<normalMaxSize.length;i++)  normalMaxSize[i]=0;
+    for (var i=0;i<normalData.length;i++)  normalData[i]=0;
+    
+
+    var indexData = [];
+    for (var latNumber = 0; latNumber < latitudeBands; latNumber++) {
+      for (var longNumber = 0; longNumber < longitudeBands; longNumber++) {
+        var first = (latNumber * (longitudeBands + 1)) + longNumber;
+        var second = first + longitudeBands + 1;
+
+// Split quadrilateral into 2 triangles so the total area will be minimal
+        
+        var F =[vertexPositionData[3*first+0], vertexPositionData[3*first+1], vertexPositionData[3*first+2]];
+        var S =[vertexPositionData[3*second+0],vertexPositionData[3*second+1],vertexPositionData[3*second+2]];
+        var F1=[vertexPositionData[3*first+3], vertexPositionData[3*first+4], vertexPositionData[3*first+5]];
+        var S1=[vertexPositionData[3*second+3],vertexPositionData[3*second+4],vertexPositionData[3*second+5]];
+
+        var SF=  [S[0]-  F[0], S[1]-  F[1], S[2]-  F[2]];
+        var F1F= [F1[0]- F[0], F1[1]- F[1], F1[2]- F[2]];
+        var S1S= [S1[0]- S[0], S1[1]- S[1], S1[2]- S[2]];
+        var S1F1=[S1[0]-F1[0], S1[1]-F1[1], S1[2]-F1[2]];
+
+        var nFSF1=  vmul(SF,F1F);
+        var nSS1F1= vmul(S1F1,S1S);
+        var nFSS1=  vmul(SF,S1S);
+        var nFS1F1= vmul(S1F1,F1F);
+
+        var aFSF1=  abs3(nFSF1);
+        var aSS1F1= abs3(nSS1F1);
+        var aFSS1=  abs3(nFSS1);
+        var aFS1F1= abs3(nFS1F1);
+
+
+
+        var vIndices, normals, areas, vIndex;
+        if ((aFSF1+aSS1F1)>(aFSS1+aFS1F1)){
+          vIndices= [[first,second+1,first+1],[first,second,second+1]];
+          normals=[unityVector3(nFS1F1),unityVector3(nFSS1)];
+          areas=  [aFS1F1,aFSS1];
+        } else {
+          vIndices= [[first,second,first+1],[second,second+1,first+1]];
+          normals=[unityVector3(nFSF1),unityVector3(nSS1F1)];
+          areas=[aFSF1,aSS1F1];
+        }
+        for (var i=0;i<2;i++) {
+          if (areas[i]>0.0) for (var j=0;j<3;j++) {
+             indexData.push(vIndices[i][j]);
+          }
+        }
+        for (var i=0;i<2;i++) if (areas[i]>0) for (var j=0;j<3;j++) {
+          
+
+          var indx0=vIndices[i][j];
+          var indx1=vIndices[i][(j+1)%3];
+          var indx2=vIndices[i][(j+2)%3];
+          var l1=abs3([vertexPositionData[3*indx1+0]-vertexPositionData[3*indx0+0],
+                       vertexPositionData[3*indx1+1]-vertexPositionData[3*indx0+1],
+                       vertexPositionData[3*indx1+2]-vertexPositionData[3*indx0+2]]);
+          var l2=abs3([vertexPositionData[3*indx2+0]-vertexPositionData[3*indx0+0],
+                       vertexPositionData[3*indx2+1]-vertexPositionData[3*indx0+1],
+                       vertexPositionData[3*indx2+2]-vertexPositionData[3*indx0+2]]);
+          var sinAngle=areas[i]/l1/l2;
+          if (sinAngle>1.0) sinAngle=1.0;
+          else if (sinAngle<-1.0) sinAngle=-1.0;
+          var angle=Math.abs(Math.asin(sinAngle)); // Do we need Math.abs() nere?
+          var w=angle*areas[i];
+          normalData[3*indx0+0]-=normals[i][0]*w;
+          normalData[3*indx0+1]-=normals[i][1]*w;
+          normalData[3*indx0+2]-=normals[i][2]*w;
+
+        }
+
+
+      }
+    }
+    for (var i=0; i<normalData.length; i+=3) {
+      var v=[normalData[i],normalData[i+1],normalData[i+2]];
+      var l=abs3(v);
+      for (var j=i; j<i+3;j++) normalData[j]/=l;
+
+    }
+//document.title="indexData.length="+indexData.length;
+
+    eyesisVertexNormalBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, eyesisVertexNormalBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normalData), gl.STATIC_DRAW);
+    eyesisVertexNormalBuffer.itemSize = 3;
+    eyesisVertexNormalBuffer.numItems = normalData.length / 3;
+
+    eyesisVertexTextureCoordBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, eyesisVertexTextureCoordBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(textureCoordData), gl.STATIC_DRAW);
+    eyesisVertexTextureCoordBuffer.itemSize = 2;
+    eyesisVertexTextureCoordBuffer.numItems = textureCoordData.length / 2;
+
+    eyesisVertexPositionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, eyesisVertexPositionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexPositionData), gl.STATIC_DRAW);
+    eyesisVertexPositionBuffer.itemSize = 3;
+    eyesisVertexPositionBuffer.numItems = vertexPositionData.length / 3;
+
+    eyesisVertexIndexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, eyesisVertexIndexBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indexData), gl.STREAM_DRAW);
+    eyesisVertexIndexBuffer.itemSize = 1;
+    eyesisVertexIndexBuffer.numItems = indexData.length;
+  }
+  function vmul(a,b) {
+    return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+  }
+  function area(a,b) {
+    var v=vmul(a,b);
+    return Math.sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
+  }
+  function abs3(v) {
+     return Math.sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
+  }
+  function unityVector3(v) {
+     l=Math.sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
+     if (l==0) return [0,0,0];
+     else return [v[0]/l,v[1]/l,v[2]/l];
+  }
+
+  var dist=-.4;
+  var distStep=0.01;
+  function drawEyesis(x,y,z, alpha, index, this_lighting) {
+
+    var lighting = document.getElementById("lighting").checked; ////
+    gl.uniform1i(shaderProgram.useLightingUniform, lighting && this_lighting); ////
+    if (lighting && this_lighting) { ////
+      gl.uniform3f( ////
+        shaderProgram.ambientColorUniform, ////
+        parseFloat(document.getElementById("ambientR").value), ////
+        parseFloat(document.getElementById("ambientG").value), ////
+        parseFloat(document.getElementById("ambientB").value) ////
+      ); ////
+      var elevation=parseFloat(document.getElementById("lightElevatrion").value)*Math.PI/180;
+      var cosElevation=Math.cos(elevation);
+      var azimuth=parseFloat(document.getElementById("lightAzimuth").value)*Math.PI/180;
+      var lightSourceDirection=[Math.sin(azimuth)*cosElevation,Math.sin(elevation),-Math.cos(azimuth)*cosElevation];
+//document.title="["+lightSourceDirection[0]+", "+ lightSourceDirection[1]+", "+ lightSourceDirection[2]+"]"; 
+      gl.uniform3f(shaderProgram.lightingDirectionUniform,lightSourceDirection[0],lightSourceDirection[1],lightSourceDirection[2]);
+
+      gl.uniform3f( ////
+        shaderProgram.directionalColorUniform, ////
+        parseFloat(document.getElementById("directionalR").value), ////
+        parseFloat(document.getElementById("directionalG").value), ////
+        parseFloat(document.getElementById("directionalB").value) ////
+      ); ////
+    } ////
+
+
+
+    loadIdentity();
+
+//    mvTranslate([0, 0, -6]);
+//    mvTranslate([0, 0, dist]);
+    mvTranslate([x,y,z]);
+
+    multMatrix(eyesisRotationMatrix); // same for both
+    setMatrixUniforms();
+
+    if (alpha>0)  {
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+        gl.enable(gl.BLEND);
+        gl.disable(gl.DEPTH_TEST);
+        gl.uniform1f(shaderProgram.alphaUniform, alpha);
+    } else {
+        gl.disable(gl.BLEND);
+        gl.enable(gl.DEPTH_TEST);
+        gl.uniform1f(shaderProgram.alphaUniform, 1.0);
+    }
+
+
+
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, eyesisTexture[index]);
+    gl.uniform1i(shaderProgram.samplerUniform, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, eyesisVertexPositionBuffer);
+    gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, eyesisVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, eyesisVertexTextureCoordBuffer);
+    gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, eyesisVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, eyesisVertexNormalBuffer);
+    gl.vertexAttribPointer(shaderProgram.vertexNormalAttribute, eyesisVertexNormalBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, eyesisVertexIndexBuffer);
+    gl.drawElements(gl.TRIANGLES, eyesisVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+//    gl.lineWidth(1);
+//    gl.drawElements(gl.LINE_STRIP, eyesisVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+  }
+
+
+
+  function drawScene() {
+    gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    perspective(45, gl.viewportWidth / gl.viewportHeight, 0.01, 100.0);
+    gl.uniform1i(shaderProgram.useLightingUniform, false);
+    drawEyesis(-.5,  0,  -1, 0, 1,false);
+    drawEyesis(-.5,  0,dist,.5, 2,false);
+    drawEyesis(-1, 0,dist, 0, 1,true);
+    drawEyesis( 0, 0,dist, 0, 0,true);
+    drawEyesis(.5, 0,dist, 0, 2,false);
+    drawEyesis(1,  0,dist, 0, 1,true);
+
+
+//    drawEyesis(-3,false);
+//    drawEyesis(dist,false);
+  }
+
+  function tick() {
+    drawScene();
+  }
+
+
+  function webGLStart() {
+    var canvas = document.getElementById("lesson11-canvas");
+    initGL(canvas);
+    initShaders();
+    initBuffers();
+    initTexture();
+
+    gl.clearColor(0.0, 0.0, 0.0, 1.0);
+
+    gl.clearDepth(1.0);
+
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+
+    canvas.onmousedown = handleMouseDown;
+    document.onmouseup = handleMouseUp;
+    document.onmousemove = handleMouseMove;
+
+    if (window.addEventListener)
+        window.addEventListener('DOMMouseScroll', wheelEvent, false);
+        window.onmousewheel = document.onmousewheel = wheelEvent;
+
+
+    setInterval(tick, 15);
+  }
+
+  function wheelEvent(event){
+        var delta = 0;
+        if (!event) event = window.event; // IE
+        if (event.wheelDelta) { //IE+Opera
+                delta = event.wheelDelta/120;
+                if (window.opera) delta = -delta;
+        } else if (event.detail) { // Mozilla
+                delta = -event.detail/3;
+        }
+        if (delta)
+                handleWheel(delta);
+        if (event.preventDefault)
+                event.preventDefault();
+	event.returnValue = false;
+
+  }
+
+  function handleWheel(delta) {
+     dist+=distStep*delta;
+     drawScene();
+  }
+
+
+</script>
+
+
+</head>
+
+
+<body onload="webGLStart();">
+
+  <canvas id="lesson11-canvas" style="border: none;" width="1500" height="800"></canvas>
+    <br/>
+    <input id="lighting" checked="checked" type="checkbox"/> Use lighting<br/>
+    <br>
+    <h2>Directional light:</h2>
+
+    <table style="border: 0pt none; padding: 10px;">
+
+        <tbody><tr>
+            <td><b>Direction:</b></td>
+            <td>Azimuth: <input id="lightAzimuth" value="225" type="text"></td>
+             <td>Elevation:  </td><td><input id="lightElevatrion" value="45" type="text"></td></tr>
+        <tr>
+
+            <td><b>Colour:</b>
+            </td><td>R: <input id="directionalR" value=".8" type="text">
+            </td><td>G: <input id="directionalG" value=".8" type="text">
+            </td><td>B: <input id="directionalB" value=".8" type="text">
+        </td></tr>
+    </tbody></table>
+
+    <h2>Ambient light:</h2>
+    <table style="border: 0pt none; padding: 10px;">
+        <tbody><tr>
+            <td><b>Colour:</b>
+            </td><td>R: <input id="ambientR" value="0.2" type="text">
+            </td><td>G: <input id="ambientG" value="0.2" type="text">
+            </td><td>B: <input id="ambientB" value="0.2" type="text">
+
+        </td></tr>
+    </tbody></table>
+
+</body>
+
+</html>

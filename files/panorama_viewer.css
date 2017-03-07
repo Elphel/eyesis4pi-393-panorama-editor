@@ -1,0 +1,270 @@
+html {
+    font-family:"Times New Roman", Times, serif;
+}
+
+.small_text {
+    font-size: 10px;
+}
+
+#idTopRightCorner {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    overflow: auto;
+}
+
+#idHeading, #idTilt, #idRoll {
+    width: 50px;
+}
+
+#idDialogs, #idHelpDialog {
+    position: absolute;
+    top: 30px;
+    right: 5px;
+    z-index: 1000;
+}
+
+#idViewsDialog {
+    padding : 2px 5px 2px 5px;
+    margin-top: 3px;
+    margin-bottom: 5px;
+}
+
+#idSettings, #idHelp, #idViews {
+   /*display: inline;*/
+   float: left;
+   /*background: rgba(200,200,200,0.8);*/
+   padding : 2px 5px 2px 5px;
+   margin: 0px 2px 2px 0px;
+}
+
+#idSettings:hover, #idHelp:hover, #idViews:hover {
+   color: white;
+   cursor: pointer;
+}
+
+#idSettings:active, #idHelp:active {
+    background: -webkit-gradient(linear, left top, left bottom, from(rgba(255,255,255,0.5)), to(rgba(225,225,225,0.8))); /* for webkit browsers */
+    background: -moz-linear-gradient(top,  rgba(255,255,255,0.5),  rgba(255,255,255,0.8)); /* for firefox 3.6+ */
+    -moz-box-shadow: 0px 0px 0px black;
+    -webkit-box-shadow: 0px 0px 0px black;
+    box-shadow: 0px 0px 0px black;
+}
+
+#idSettingsDialog {
+/*    width: 450px;*/
+/*    height: 520px;*/
+    padding: 5px;
+    margin-top: 3px;
+    overflow: auto;
+}
+
+#idSettingsDialogNumTextures {
+   width: 40px;
+}
+
+#idSettingsDialogOkButton,#idSettingsDialogCancelButton {
+    float:left;
+    padding: 2px 5px 2px 5px;
+    font-size: 14px;
+}
+
+
+#idSettingsDialogOkButton:hover,#idSettingsDialogCancelButton:hover {
+   color: white;
+   cursor: pointer;
+}
+
+#idSettingsDialogOkButton:active,#idSettingsDialogCancelButton:active {
+    border: 0px;
+    background: -webkit-gradient(linear, left top, left bottom, from(rgba(210,210,210,1)), to(rgba(180,180,180,1))); /* for webkit browsers */
+    background: -moz-linear-gradient(top,  rgba(180,180,180,1),  rgba(210,210,210,1)); /* for firefox 3.6+ */
+}
+
+.gradient {
+    /*background: rgba(255,255,255,0.7);*/
+    background: -webkit-gradient(linear, left top, left bottom, from(rgba(255,255,255,0.9)), to(rgba(225,225,225,0.6))); /* for webkit browsers */
+    background: -moz-linear-gradient(top,  rgba(255,255,255,0.9),  rgba(255,255,255,0.6)); /* for firefox 3.6+ */
+    -moz-box-shadow: 2px 2px 2px black;
+    -webkit-box-shadow: 2px 2px 2px black;
+    box-shadow: 2px 2px 2px black;
+    -moz-border-radius:3px;
+    -webkit-border-radius:3px;
+    border-radius:3px;
+}
+
+.input_field {
+    border: 1px solid black;
+    -moz-border-radius:3px;
+    -webkit-border-radius:3px;
+    border-radius:3px;
+    padding: 2px 1px 2px 1px;
+}
+
+.input_field:disabled {
+    color: black;
+}
+
+.button {
+    font-size: 12px;    
+    border: 0px;
+    background: -webkit-gradient(linear, left top, left bottom, from(rgba(180,180,180,1)), to(rgba(210,210,210,1))); /* for webkit browsers */
+    background: -moz-linear-gradient(top,  rgba(210,210,210,1),  rgba(180,180,180,1)); /* for firefox 3.6+ */
+    -moz-box-shadow: 2px 2px 2px black;
+    -webkit-box-shadow: 2px 2px 2px black;
+    box-shadow: 2px 2px 2px black;
+    -moz-border-radius:3px;
+    -webkit-border-radius:3px;
+    border-radius:3px;
+}
+
+.button:hover {
+   color: white;
+   cursor: pointer;
+}
+
+.button:active {
+    border: 0px;
+    background: -webkit-gradient(linear, left top, left bottom, from(rgba(210,210,210,1)), to(rgba(180,180,180,1))); /* for webkit browsers */
+    background: -moz-linear-gradient(top,  rgba(180,180,180,1),  rgba(210,210,210,1)); /* for firefox 3.6+ */
+}
+
+.button:disabled {
+    -moz-box-shadow: 1px 1px 1px black;
+    -webkit-box-shadow: 1px 1px 1px black;
+    box-shadow: 1px 1px 1px black;
+    background: -webkit-gradient(linear, left top, left bottom, from(rgba(180,180,180,1)), to(rgba(210,210,210,1))); /* for webkit browsers */
+    background: -moz-linear-gradient(top,  rgba(210,210,210,1),  rgba(180,180,180,1)); /* for firefox 3.6+ */
+}
+
+#IdSeeThroughDiv {
+    margin: 5px;
+}
+
+#seeThroughInput {
+    width: 35px;
+}
+
+/*see through slider*/
+#seeThroughSlider {
+    width: 10px;
+    margin: 5px;
+}
+
+#seeThroughSlider .ui-slider-handle {
+    left: -3px;
+    background: white;
+    border-color: rgba(0,0,0,1);
+    width: 15px; 
+    height: 15px; 
+}
+
+#idSettingsNumTextures, #idSettingsRange, #idSettingsAsCamera, #idSettingsSeeThrough, #idSettingsTransitionTime, #idSettingsTransitionSteps, #idSettingsDotSize {
+    width: 40px;
+    text-align: right;
+} 
+
+#idSettingsThisColor, #idSettingsColor, #idSettingsSelectedColor, #idSettingsGhostColor, #idSettingsInvisibleColor {
+    width: 65px;
+}
+
+#idSettingsMap {
+    width: 70px;
+}
+
+#idSettingsStart {
+    width: 300px;
+}
+
+.small_square {
+    width: 19px;
+    height: 19px;
+    border: 1px solid black;
+    -moz-border-radius:3px;
+    -webkit-border-radius:3px;
+    border-radius:3px;
+}
+
+#idPlanView {
+    -moz-box-shadow: 2px 2px 2px black;
+    -webkit-box-shadow: 2px 2px 2px black;
+    box-shadow: 2px 2px 2px black;
+    -moz-border-radius:3px;
+    -webkit-border-radius:3px;
+    border-radius:3px;
+}
+
+#idViewAzimuth, #idViewElevation {
+    width: 60px;
+}
+
+#idInfo{
+    position: absolute;
+    bottom: 3px;
+    left: 3px;
+    padding : 2px 4px 2px 4px;
+    overflow: auto;
+}
+
+#idInfo_toggle {
+   width: 67px;
+   padding : 2px 5px 2px 5px;
+    /*display: inline;*/
+    float: left;
+}
+
+#idInfo_toggle:hover {
+   color: white;
+   cursor: pointer;
+}
+
+#idPermanentLink_div {
+    /*display: inline;*/
+    float: left;
+    padding: 2px 5px 2px 5px;
+}
+
+#idHelpDialog {
+    padding: 2px 5px 2px 5px;
+    margin-top: 3px;
+}
+
+#error_no_webgl{
+    -moz-box-shadow: 2px 2px 6px black;
+    -webkit-box-shadow: 2px 2px 6px black;
+    box-shadow: 2px 2px 6px black;
+}
+
+#kml_proto_list {
+  position: absolute;
+  top: 30px;
+  left: 140px;
+  width: 300px;
+  height: 20px;
+  z-index: 1002;
+}
+
+#kml_mask_list {
+  position: absolute;
+  top: 78px;
+  left: 140px;
+  width: 300px;
+  height: 20px;
+  z-index: 1001;
+}
+
+#idSettingsKml{
+    width: 300px;
+    position: absolute;
+    left: 140px;    
+    top: 54px;
+    height: 22px;
+}
+
+#idSettingsMap{
+    width: 300px;
+    position: absolute;
+    left: 140px;    
+    top: 102px;
+    height: 22px;
+}

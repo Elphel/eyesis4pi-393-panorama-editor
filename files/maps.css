@@ -1,0 +1,52 @@
+
+#all_wrap {
+    position: absolute;
+    bottom: 3px;
+    right: 3px;
+}
+
+#map_wrap,#osmap_wrap {
+    position: relative;
+    margin: 2px;
+}
+
+#map, #osmap {
+    width: 400px;
+    height: 300px;
+    font-size: 12px;
+}
+
+#map_header, #osmap_header {
+    display: inline-block;
+    padding : 2px 5px 2px 5px;
+    margin  : 2px 2px 2px 0px;
+}
+
+#map_header:hover, #table_header:hover, #osmap_header:hover {
+   color: white;
+   cursor: pointer;
+}
+
+#map_div, #osmap_div {
+    padding : 2px;
+    background: white;
+    /*float: right;*/
+}
+
+.grey {
+    background: rgba(150,150,150,0.5);
+}
+
+#status { font-family: 'Dancing Script', arial, serif; }
+
+.maps_header {
+    /*background: rgba(255,255,255,0.7);*/
+    background: -webkit-gradient(linear, left top, left bottom, from(rgba(255,255,255,0.8)), to(rgba(225,225,225,0.5))); /* for webkit browsers */
+    background: -moz-linear-gradient(top,  rgba(255,255,255,0.8),  rgba(255,255,255,0.5)); /* for firefox 3.6+ */
+    -moz-box-shadow: 2px 2px 2px black;
+    -webkit-box-shadow: 2px 2px 2px black;
+    box-shadow: 2px 2px 2px black;
+    -moz-border-radius:3px;
+    -webkit-border-radius:3px;
+    border-radius:3px;
+}

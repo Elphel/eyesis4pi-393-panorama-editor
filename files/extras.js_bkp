@@ -1,0 +1,140 @@
+/*
+*! -----------------------------------------------------------------------------**
+*! FILE NAME  : extras.js
+*! REVISION   : 1.0
+*! DESCRIPTION: additional funcions for maps, blinking (to be moved somewhere else later)
+*! Copyright (C) 2011 Elphel, Inc.
+*!
+*! -----------------------------------------------------------------------------**
+*!  This program is free software: you can redistribute it and/or modify
+*!  it under the terms of the GNU General Public License as published by
+*!  the Free Software Foundation, either version 3 of the License, or
+*!  (at your option) any later version.
+*!
+*!  This program is distributed in the hope that it will be useful,
+*!  but WITHOUT ANY WARRANTY; without even the implied warranty of
+*!  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+*!  GNU General Public License for more details.
+*!
+*!  You should have received a copy of the GNU General Public License
+*!  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*!
+*!  It means that the program's users have the four essential freedoms:
+*!
+*!   * The freedom to run the program, for any purpose (freedom 0).
+*!   * The freedom to study how the program works, and change it to make it do what you wish (freedom 1). 
+*!     Access to the source code is a precondition for this.
+*!   * The freedom to redistribute copies so you can help your neighbor (freedom 2).
+*!   * The freedom to distribute copies of your modified versions to others (freedom 3). 
+*!
+*! By doing this you can give the whole community a chance to benefit from your changes. 
+*! Access to the source code is a precondition for this. 
+*! -----------------------------------------------------------------------------**
+*/
+
+var osm_CurrentMarker;
+
+function initialize_maps() {    
+  
+	// why did I use range here?
+	var url=serverURL+"?kml="+settings.kml+"&range="+settings.range;
+	//var url=serverURL+"?kml="+settings.kml;
+	
+	if (settings.mask!="") url+="&mask="+settings.mask; // use second KML file to overwrite main KML file settings
+	//if (settings.map!="") url+="&map="+settings.map;
+	url+="&map=all";
+	
+	//if (settings.start!="") url+="&href="+settings.start+"&range="+settings.range;
+	if (settings.start!="") url+="&href="+settings.start;
+	if ((typeof(settings.proto)!="undefined") && (settings.proto!="")) url+="&proto="+settings.proto; // use this KML file as a prototype for kml= (copy to kml if kml does not exist)
+	
+	$("#map_header").trigger('click');
+	$("#osmap_header").trigger('click');
+	
+	requestKml(url,place_points);  
+	//requestKml(serverURL+"?kml="+settings.kml,place_points);
+	/*toggle_gmap();
+	toggle_osmap(); */ 
+}
+
+function initialize_maps_nowebgl() {    
+  
+	var url=serverURL+"?kml="+settings.kml+"&range="+settings.range;
+	
+	if (settings.mask!="") url+="&mask="+settings.mask; // use second KML file to overwrite main KML file settings
+	//if (settings.map!="") url+="&map="+settings.map;
+	url+="&map=all";
+	
+	//if (settings.start!="") url+="&href="+settings.start+"&range="+settings.range;
+	if (settings.start!="") url+="&href="+settings.start;
+	if ((typeof(settings.proto)!="undefined") && (settings.proto!="")) url+="&proto="+settings.proto; // use this KML file as a prototype for kml= (copy to kml if kml does not exist)
+	
+	$("#map_header").trigger('click');
+	$("#osmap_header").trigger('click');
+	
+	requestKml(url,place_points_nowebgl);  
+	//requestKml(serverURL+"?kml="+settings.kml,place_points);
+	/*toggle_gmap();
+	toggle_osmap(); */ 
+	
+}
+
+function loading_blink(){
+    var d = new Date();
+
+    var curr_sec = d.getSeconds();
+
+    if      (curr_sec%4==1) {
+	document.getElementById('status').style.color = "white";
+	document.getElementById('status').innerHTML = "Loading.";
+    }
+    else if (curr_sec%4==2) {
+	document.getElementById('status').style.color = "black";
+	document.getElementById('status').innerHTML = "Loading..";
+    }
+    else if (curr_sec%4==3) {
+	document.getElementById('status').style.color = "white";
+	document.getElementById('status').innerHTML = "Loading...";
+    }
+    else {                   
+	document.getElementById('status').style.color = "black";
+	document.getElementById('status').innerHTML = "Loading";
+    }
+}
+
+function pre_loading_blink() {
+    var top = window.innerHeight;
+    var left = window.innerWidth;
+    top = top/2;
+    left = left/2;
+    document.getElementById('status').style.top = top - $('#status').height()/2;
+    document.getElementById('status').style.left = left - $('#status').width()/2;
+    $("#status").show();
+    $("#status").html("Loading");
+}
+
+function place_point(node,index) {
+    marker = node;
+    gm_CurrentMarker=marker;
+    gm_place_point(marker,index);
+    osm_CurrentMarker=marker;
+    osm_place_point(marker,index);
+}
+
+function getMapNodes(url,href){
+    pre_loading_blink();
+    loading_intvl=setInterval("loading_blink()",1000);
+    //map = [];    
+    
+    var url=serverURL+"?kml="+settings.kml+"&range="+settings.range;
+    
+    if (settings.mask!="") url+="&mask="+settings.mask; // use second KML file to overwrite main KML file settings
+    //if (settings.map!="") url+="&map="+settings.map;
+    url+="&map=all";
+    //if (settings.start!="") url+="&href="+settings.start+"&range="+settings.range;
+    url+="&href="+href;
+    
+    requestKml(url,kmlGot);
+    
+    //requestKml(url+req,kmlGot);
+}

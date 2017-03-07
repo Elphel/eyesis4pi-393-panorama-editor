@@ -1,0 +1,38 @@
+<html>
+<head>
+    <title>Elphel Panorama Index</title>
+
+    <script src="files/jquery-1.6.4.min.js"></script>
+    <script src="files/useful_functions.js"></script>
+    <script src="files/pano_index.js"></script>
+    <link href="files/button.css" rel="stylesheet" type="text/css">
+    <link href="files/pano_index.css" rel="stylesheet" type="text/css">
+
+    <style>
+    </style>
+
+</head>
+<body>
+
+<h3>Elphel Panorama Routes Index</h3>
+
+<div id=main >
+    <div id='route_list'>
+    </div>
+    <div id='action_list'>
+	<div id='action_form' >
+	    New copy name: <input type=text id=input_fn class="input_text" />
+	    <button id=do_things onclick="create_copy()" >Create Editable Copy</button>
+	</div>
+	<div id=status_box>
+	    Status:&nbsp;<input type=text id=status class="input_text" disabled />
+	</div>
+    </div>
+</div>
+
+<script>
+postRequest("GetRoutesAndKMLs", "");
+</script>
+
+</body>
+</html>

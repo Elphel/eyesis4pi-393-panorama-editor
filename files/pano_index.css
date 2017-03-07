@@ -1,0 +1,73 @@
+body{
+  font-family:"Times New Roman", Times, serif;
+}
+
+table{
+}
+
+th{
+    border: 0px solid black;
+    background: rgba(120,200,120,0.5);
+    padding: 5px;
+    border-radius: 2px;
+}
+
+td{
+    border: 0px solid black;
+    /*background: rgba(100,200,100,0.1);*/
+    padding: 2px 10px 2px 10px;
+    text-align: center;
+    border-radius: 2px;
+}
+
+a:link{
+    color: rgba(30,100,30,1);
+}
+
+a:visited{
+    color: rgba(50,50,50,1);
+}
+
+#main{
+    position: absolute;
+    padding: 5px;
+}
+
+#route_list{
+    position: relative;
+    float: left;
+/*	width: 450px;
+    height: 350px;*/
+    /*background: rgba(100,100,200,0.4);*/
+}
+
+#action_list{
+    position:relative;
+    float: left;
+}
+
+#action_form{
+    position:relative;
+    width: 500px;
+    background: rgba(100,200,100,0.4);
+    padding: 5px;
+    margin: 3px;
+}
+
+#input_fn{
+    position: relative;
+    width: 200px;
+    border-radius: 3px;   
+}
+
+#status_box{
+    position: relative;
+    background: rgba(100,200,100,0.4);
+    padding: 5px;
+    margin: 3px;
+}
+
+#status{
+    width: 454px;
+    background: white;
+}

@@ -1,0 +1,1807 @@
+<html>
+<head>
+<!--
+*! FILE NAME  : webgl_panorama_editor.html
+*! DESCRIPTION: WebGL panorama viewer/editor, used examples in "Learning WebGL"( http://learningwebgl.com/blog/?p=1253 )
+*! VERSION:     1.3
+*! AUTHOR:      
+*! Copyright (C) 2011 Elphel, Inc
+*! -----------------------------------------------------------------------------**
+*!  This program is free software: you can redistribute it and/or modify
+*!  it under the terms of the GNU General Public License as published by
+*!  the Free Software Foundation, either version 3 of the License, or
+*!  (at your option) any later version.
+*!
+*!  This program is distributed in the hope that it will be useful,
+*!  but WITHOUT ANY WARRANTY; without even the implied warranty of
+*!  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+*!  GNU General Public License for more details.
+*!
+*!  The four essential freedoms with GNU GPL software:
+*!  * the freedom to run the program for any purpose
+*!  * the freedom to study how the program works and change it to make it do what you wish
+*!  * the freedom to redistribute copies so you can help your neighbor
+*!  * the freedom to distribute copies of your modified versions to others
+*!
+*!  You should have received a copy of the GNU General Public License
+*!  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*! -----------------------------------------------------------------------------**
+*!  $Log: pano_db_inerface.php,v $
+*!
+ -->
+<title>Panorama Viewer/Editor</title>
+
+<meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
+
+<link rel="some icon" href="files/images/fp_logo.png">
+
+<script src="files/sylvester.js"            type="text/javascript"></script>
+<script src="files/glUtils.js"              type="text/javascript" ></script>
+<script src="files/get_kml.js"              type="text/javascript" ></script>
+<script src="files/sunpos.js"               type="text/javascript" ></script>
+<script src="files/jquery-1.6.4.min.js"     type="text/javascript"></script>
+<script src="files/jquery-ui-1.8.13.custom.min.js" type="text/javascript"></script>
+<script src="files/modify_kml.js"           type="text/javascript"></script>
+<script src="files/webgl_subs.js"           type="text/javascript"></script>
+<script src="files/pano_mouse_events.js" type="text/javascript"></script>
+<script src="files/plan_view.js"            type="text/javascript"></script>
+
+<script src="files/leaflet/leaflet.js"></script>
+
+<link  href="files/jquery-ui-1.8.13.custom.css" rel="stylesheet" type="text/css" />
+<link  href="files/panorama_viewer.css" rel="stylesheet" type="text/css" />
+<script src="files/seethrough_slider.js"></script>
+<script src="files/settings_dialog.js"></script>
+
+<script src="files/translate.js"></script>
+<script src="files/jquery_list.js"></script>
+<link href="files/list.css" rel="stylesheet" type="text/css" />
+
+<!--maps links start-->
+    <link type="text/css" href="files/maps.css" rel="stylesheet" />
+
+    <!-- an individual key must be generated for each website-->
+    <!--<script src="http://maps.google.com/maps?file=api&amp;v=2&amp;sensor=false&amp;key=ABQIAAAAOfPl0ij7ARlHxPI3xKN-IhTbTdz52PKNAoxxGazVreAjPP4cQxScMIzHbNN8xU3Hdves_feAOgERIQ" type="text/javascript"></script>-->
+    <!--community-->
+    <!--<script src="http://maps.google.com/maps?file=api&amp;v=2&amp;sensor=false&amp;key=ABQIAAAAOfPl0ij7ARlHxPI3xKN-IhQMu0AeT8-u_88N8Nw_CPBy6WRMERS0vfNxPxQnZDkvIrxd3Km94k8l6w" type="text/javascript"></script>-->
+    <!--irc-->
+    <!--<script src="http://maps.google.com/maps?file=api&amp;v=2&amp;sensor=false&amp;key=ABQIAAAAOfPl0ij7ARlHxPI3xKN-IhQGja30efaXZL0SnkQH3NMeNhapzhQtlhhLN_73G6XnD-TFLQDoZIJyvg" type="text/javascript"></script>-->
+    <!--OSM begin-->
+    <!--<script type="text/javascript" src="http://www.openlayers.org/api/OpenLayers.js"></script>-->
+    <!--<script type="text/javascript" src="OpenStreetMap.js"></script>-->
+    <!--<script type="text/javascript">
+	var no_connection=true;
+	if (typeof(GBrowserIsCompatible)!="undefined") no_connection = false;
+	else                                           no_connection = true;
+    </script>-->
+
+    <!--<script src="files/g_map_custom.js"></script>-->
+    <script src="files/os_map_custom.js"></script>
+    <!--OSM end-->
+<!--maps links end-->
+    <script src="files/extras.js" type="text/javascript"></script>
+
+<script src="files/dots.js"></script>
+<link rel="stylesheet" type="text/css" href="files/leaflet/leaflet.css" />
+
+<script id="shader-fs" type="x-shader/x-fragment">
+  #ifdef GL_ES
+  precision highp float;
+  #endif
+
+  varying vec2 vTextureCoord;
+  varying vec3 vLightWeighting;
+
+  uniform float uAlpha; // for blending
+
+  uniform sampler2D uSampler;
+
+  void main(void) {
+    vec4 textureColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+    gl_FragColor = vec4(textureColor.rgb * vLightWeighting, textureColor.a * uAlpha);
+  }
+</script>
+
+<script id="shader-vs" type="x-shader/x-vertex">
+  attribute vec3 aVertexPosition;
+  attribute vec3 aVertexNormal;
+  attribute vec2 aTextureCoord;
+
+  uniform mat4 uMVMatrix;
+  uniform mat4 uPMatrix;
+  uniform mat4 uNMatrix;
+
+  uniform vec3 uAmbientColor;
+
+  uniform vec3 uLightingDirection;
+  uniform vec3 uDirectionalColor;
+
+  uniform bool uUseLighting;
+
+
+  varying vec2 vTextureCoord;
+  varying vec3 vLightWeighting;
+
+  void main(void) {
+    gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+    vTextureCoord = aTextureCoord;
+    if (!uUseLighting) {
+      vLightWeighting = vec3(1.0, 1.0, 1.0);
+    } else {
+      vec4 transformedNormal = uNMatrix * vec4(aVertexNormal, 1.0);
+      float directionalLightWeighting = max(dot(transformedNormal.xyz, uLightingDirection), 0.0);
+      vLightWeighting = uAmbientColor + uDirectionalColor * directionalLightWeighting;
+    }
+  }
+</script>
+
+
+<script type="text/javascript">
+
+  var no_connection = false;
+  
+  var canvas;
+  var numSubTextures=8; //2; //8;
+  var documentRoot=window.location.href.substr(0,window.location.href.lastIndexOf('?'))
+  documentRoot=documentRoot.substr(0,documentRoot.lastIndexOf('/')+1);
+  var serverURL=documentRoot+"map_pano.php";
+  var showInfo=true;
+//  var arrows=[];
+  var arrows; // array of objects
+/*{angle:0,     // degrees, - direction?
+   down:0,      // meters down
+   distance:0,  // distance
+   type:"a"};   // "a" - arrow, "c" camera
+*/
+  var floatingEyesisNum=-1;
+  var floatingEyesis={angle:0,     // degrees, - direction?
+                       down:0,      // meters down
+                   distance:0};  // distance
+
+
+  var floatingEyesisLLE={}; // latitude/longitude/elevation, calculated
+  var floatingEyesisVisible=false;
+  var floatingEyesisDragging=false; // true when clicked on floating Eyesis, moving it while mousedown
+  var floatingEyesisHorizontal=false; // true when clicked on floating Eyesis, moving it while mousedown
+
+  var floatingEyesisStart={}; // save initial values (for ortho)
+  var arrows_below=2.5;
+  var arrows_away=  15;
+  var worldRadius = 100; // meters to the sphere
+
+  var waitForPano=true;
+//  var arrowRadius= 25; //20; // distance (in viewport pixels) from the arrow center to select arrow in the viewport
+  var arrowRadius= 25; //20; // distance (in viewport pixels) from the arrow center to select arrow in the viewport
+  var maxPanoTilt=90; // maximal tilt of the panorama from vertical during HTR adjustment
+  var gl;
+  var lockedDirection=0;
+  var directionIsLocked=false;
+
+  var earthRadius=6378100; //meters
+  var latLongRounding=1000000;  // rounding for showInformation
+  var altRounding=100;          // rounding for showInformation
+  var orientRounding=100;       // rounding for showInformation
+  var settings={
+      edit:false,              // edit mode enabled
+      view:false,
+      numTextures:2,                  // number of simultaneous textures (loaded in background)
+//      kml:"map_goblins01.kml",  // kml file ("database") to use
+      kml:"",                     // kml file ("database") to use
+      start:"",                   // image name of the start node
+      as_camera:95,               // show as cameras if closer than that
+      range:10000,                // request request all cameras in that radius
+      labels:false,               // use div labels for hotspots
+      closestIn2d:false,          // when cluttered, use closest hotspot in 2d (false - use nearest in distance the from viewer)
+      keepZoom:false,             // when resizing window - keep zoom level (false - keep FOV)
+      planDotSize:5,              // size of the square dot on the plan view 
+      planThisColor:"#44cc44",    // color of "this" camera on the plan view
+      planColor:"#4444cc",        // color of the camera on the plan view
+      planColorSelected:"#ff4444",// color of the selected camera on the plan view
+      planColorGhost:"#ccaa44",   // color of the "ghost"camera on the plan view
+      planColorInvisible:"#cccccc", // color of the camera on the plan view, having visibility=0 in KML
+      seethrough: 0.4,            // show previous panorama (in edit mode)   
+      transitionTime:5,           // transition time between panoramas, seconds (0 - disable transiotion effect)
+      transitionSpeed:0,          // if >0, uses transition speed in m/s
+//      transitionSteps:50,         // transition transparency steps between panoramas
+      mask:"",                    // kml file to overwrite parameters in the main KML (mostly "visibility"?
+      proto:"",
+      map:"",                     // "" - suppose sequential (fast), "full" - rebuild map, "interpolate" (implies sequential) - use "visibility" as "valid coordinates", interpolate between
+      follow:false,               // when jumping between cameras, look in the camera direction  (or opposite - which is closer to the direction of jump)
+      Visibility3d: false,        // request kml with full 3d visibility ranges (for editing), when false - reply will have tag <open> - 0 always arrow
+      fovy: 45,
+      markVisibility3d: false     // highlight visible (in 3d) cameras, false - highlight keypoints
+      };
+
+  var Sun={azimuth:175.7,
+           elevation:66.7,
+           fraction:0.7,       // fraction of directional light (1.0-fraction - diffused light)
+           directionalRGB:[1.0,1.0,1.0], // white
+           ambientRGB:[1.0,1.0,1.0], // white
+           unitVector:[0,0,1] // has to be calculated when this view, elevation or global view azimuth/elevation are changed
+           };
+  var panoTexturesSrc;
+  var panoTextures;
+  var panoImages;
+  var panoLoadedSubTextures;
+  var map = [];  // nodes from kml and indises
+  var mapIndices; // from texture number to node number - number dependent on maximal number of textures
+
+  var fovYMin=10; // minimal horizontal angle of view
+  var fovYMax=120; // maximal horizontal angle of view
+  var fovY=45;    // current horizontal angle of view
+  var fovK=1.1;   // scaling of fovY per wheel delta
+//  var znear=0.1;
+  var znear=0.02;
+//  var znear=10;
+  var zfar= 100.0;
+//  var zfar= 2.0;
+
+
+  var currentTextureNumber=-1;
+  var previousTextureNumber=-1; // previous texture number for comparison in edit mode
+  var transitionSeeThrough=0; // see through old panorama during transition
+  var transitionStartLLE={}; // save map[0] latitude/longitude/elevation there
+  var transitionEndLLE={};
+  var transitionDeltaAngle;
+  var transitionEndTime;
+  var lastHeading; // should be undefined=0;
+  var currentTextureWidth=0;
+  var currentTextureHeight=0;
+  var maximalZoom=1.0; // relative to texture pixels
+//  var minimalZoom=.01; // relative to texture pixels (calculated from fovYMax) - local var
+  var currentZoom; // relative to texture pixels
+  var verticalEnabled=false;
+
+
+/*
+Orto mode is implemented using the model of a weight attached with a fixed length (orthoStep==10) string to a mouse pointer.
+When the movement is just started (string was never tight), any direction is possible, as if ortho is off. As soon as the string
+becomes tight first time, the rotation angles are restored to initial (at mousedown event) and the whole mouse movement (~=orthoStep)
+is processed at once, deciding which of the two movements (vertiacal or horizontal) was farther - the other one is zeroed out.
+During the movement, if the "string was tight" (distance between current mouse coordinates and savedX, savedY is greater than orthoStep,
+the "weight" is moved towards pointer to the distance orthoStep from it, direction (vertical/horizontal) is re-calculated. If the string
+is not tight (i.e. reverse of the movement direction), the selected direction is not changed (until the string will be tight again)
+*/
+  var orthoStep=10; // use movement that far to select direction in ortho mode
+  var ortoDir=-1; // -1 - not aset, 0 - horizontal, 1  - vertical
+  var savedX, savedY, savedH, savedT, savedR, savedA, SavedE; // saved X, Y, Heading , Tilt,, roll (Azimuth, Elevation)  at saved X, Y
+  var editEnabled=false; // TODO: use url parameters to turn editEnabled on/off - done
+  var showCams=true;
+  var clickCams=true;  // click/label footprints
+
+  var showPlan;
+    function showInformation() {
+      if (showInfo) {
+//        var latLongRounding=1000000;
+//        var altRounding=100;
+//        var orientRounding=100;
+        var correctedHeading=map[0].heading-map[0].cameraHeading;
+        if (correctedHeading<360) correctedHeading+=360;
+        if (correctedHeading>360) correctedHeading-=360;
+        document.getElementById("idLongitude").value=Math.round(latLongRounding*map[0].longitude)/latLongRounding;
+        document.getElementById("idLatitude").value=Math.round(latLongRounding*map[0].latitude)/latLongRounding;
+        document.getElementById("idAltitude").value=Math.round(altRounding*map[0].altitude)/altRounding;
+        document.getElementById("idHeading").value=Math.round(orientRounding*correctedHeading)/orientRounding;
+        document.getElementById("idTilt").value=Math.round(orientRounding*(map[0].tilt-90))/orientRounding;
+        document.getElementById("idRoll").value=Math.round(orientRounding*map[0].roll)/orientRounding;
+        document.getElementById("idViewAzimuth").innerHTML=Math.round(orientRounding*azimuth)/orientRounding;
+        document.getElementById("idViewElevation").innerHTML=Math.round(-orientRounding*elevation)/orientRounding;
+
+        document.getElementById("idNodeName").innerHTML=(typeof(map[0].name!='undefined'))?map[0].name:"";
+        document.getElementById("idNodeDescription").value=(typeof(map[0].description!='undefined'))?map[0].description:"";
+        document.getElementById("idKeyPoint").checked=map[0].visibility;
+
+      }
+    }
+    function inputHTR() {
+      map[0].heading=parseInt(document.getElementById("idHeading").value)+map[0].cameraHeading;
+      if (map[0].heading<360) map[0].heading+=360;
+      if (map[0].heading>360) map[0].heading-=360;
+      map[0].tilt=parseInt(document.getElementById("idTilt").value)+90;
+      map[0].roll=parseInt(document.getElementById("idRoll").value);
+      recalcHTR();
+      drawScene(); //drawArrowsAndCams();
+    }
+
+  function unlockAxis(){
+    directionIsLocked=false;
+    document.getElementById("idLockedAxis").style.display="none";
+  }
+  function lockAxis(direction){
+    lockedDirection=direction;
+    directionIsLocked=true;
+    document.getElementById("idLockedAxisDirection").innerHTML=lockedDirection;
+    document.getElementById("idLockedAxis").style.display="";
+  }
+
+  function display_error(message){
+	var top = window.innerHeight;
+	var left = window.innerWidth;
+	$('#error_no_webgl').html(message);
+	top = (top/2)-$('#error_no_webgl').height()/2;
+	left = (left/2)-$('#error_no_webgl').width()/2;
+	$('#error_no_webgl').css({top: top+'px',left: left+'px'});
+	$('#error_no_webgl').show();
+	clearInterval(loading_intvl);
+	$("#status").hide();
+  }
+
+  function kmlGot(panos,writable) {
+     //applySettings();
+
+     if ((panos.length==0) || (typeof(panos[0].latitude)=="undefined")) { 
+	//display_error("KML file is undefined, is corrupted or does not exist. Please provide the kml path in the url as '...html?kml=filename.kml&'");
+	display_error("The route is undefined or does not exist. Please provide the correct route name in the url as '...html?kml=route-name&'");
+	$('#idSettingsDialog').hide();
+	$("#idInfo_toggle").click();
+	document.getElementById("idPermanentLink_div").style.display="none";
+	return;
+     }
+     if ((panos.length<1)||(typeof(panos[0]))) {}
+
+     if (settings.start=="") settings.start = panos[0].href.substr(panos[0].href.lastIndexOf('/')+1);
+
+     if (((settings.transitionTime>0) || (settings.transitionSpeed>0)) && (currentTextureNumber>=0)) {
+       transitionStartLLE.latitude=map[0].latitude;
+       transitionStartLLE.longitude=map[0].longitude;
+       transitionStartLLE.altitude=map[0].altitude+0.2; // not to start from the camera itself
+     }
+     map=panos;
+     calcArrows();
+     if ((settings.transitionTime>0) || (settings.transitionSpeed>0)) {
+       transitionEndLLE.latitude=map[0].latitude;
+       transitionEndLLE.longitude=map[0].longitude;
+       transitionEndLLE.altitude=map[0].altitude;
+     }
+
+     writable = writable && !settings.view;
+
+     setWritableMode(writable);
+     if (settings.edit) calcVisibility3d();
+     showInformation();
+
+     
+     if (!no_connection) {
+        //osm_remove_points();
+        osm_place_points();
+	osm_set_current_position(map[0]);
+     }
+
+// try to reuse textures
+     for (var i=0;i<mapIndices.length;i++) mapIndices[i]=-1;
+//document.title="panoTexturesSrc.length="+panoTexturesSrc.length;
+     for (var i=0;i<map.length;i++) {
+       map[i].textureNumber=-1;
+       for (var j=0; j<panoTexturesSrc.length; j++) if (map[i].href==panoTexturesSrc[j]) {
+         map[i].textureNumber=j; // new node has texture already cached
+         mapIndices[j]=i; // existent texture used around the new node
+         break;
+       }
+     }
+     for (var i=0;i<map.length;i++) { // will start from the most important
+       if (map[i].textureNumber<0) {
+// First - try to (re)use those that are not needed and not equal to the current
+         for (var j=0;j<panoTexturesSrc.length; j++) if ((j!=currentTextureNumber) && (mapIndices[j]<0)) {
+           map[i].textureNumber=j;
+           mapIndices[j]=i;
+           break;
+         }
+// did we find it?
+         if ((i==0) && (map[i].textureNumber<0)) { // no, no unused texture slots for the placed we are going
+// just use any but the currently in use
+           for (var j=0;j<panoTexturesSrc.length; j++) if (j!=currentTextureNumber) {
+// set that newly needed to unsatisfied
+             map[mapIndices[j]].textureNumber=-1;
+             map[0].textureNumber=j;
+             mapIndices[j]=0;
+             break;
+           }
+         } 
+       }
+     }
+//alert ("kmlGot() - 1\n"+panoTexturesSrc[map[0].textureNumber]+"\n"+map[0].href);
+     if (panoTexturesSrc[map[0].textureNumber]!=map[0].href) {
+       panoTexturesSrc[map[0].textureNumber]=map[0].href;
+//alert ("kmlGot() - 2");
+
+       loadTexture(map[0].textureNumber);
+     } else {
+//alert ("kmlGot() - 3");
+        switchPanorama();
+     }
+     createPermanentLink();
+     
+
+// First item is where we came (mnost important
+// TODO: make the panorama in the same direction - second important
+  }
+  function switchPanorama() {
+//alert ("switchPanorama() - 1, settings.transitionTime="+settings.transitionTime+" previousTextureNumber="+previousTextureNumber);
+// 1 -  launch loading of surrounding panoramas (if any),
+// 2 -  (re)calculate arrows,
+//  make step (current texture number
+//alert ("switch panorama");
+     unlockAxis();
+
+    loading_intvl=setInterval("loading_blink()",1000);
+
+    $("#status").show();
+// just testing it here (new panorama was sometimes briefly appearing before transiotion)
+
+     if (((settings.transitionTime>0) || (settings.transitionSpeed>0)) && (currentTextureNumber>=0)) {
+       transitionSeeThrough=1.0;
+     }
+     for (var i=0;i<map.length;i++) if ((map[i].textureNumber>=0) && (panoTexturesSrc[map[i].textureNumber]!=map[i].href)){
+       panoTexturesSrc[map[i].textureNumber]=map[i].href;
+       loadTexture(map[i].textureNumber); // should load other panos in background
+     }
+     var dlat,dlong,lat;
+//     arrows=Array(map.length-1);
+//document.title="map.length="+map.length;
+//     earthRadius=6378100; //meters
+//document.title="";
+     calcArrows();
+//alert ("switchPanorama() - 2");
+
+// calculate panorama rotation matrix according to heading, tilt, roll
+     previousTextureNumber=currentTextureNumber;
+     currentTextureNumber=map[0].textureNumber;
+     previousPanoramaRotationMatrix=panoramaRotationMatrix.dup();
+//document.title+=" currentTextureNumber="+currentTextureNumber;
+     currentTextureWidth=  panoImages[map[0].textureNumber][0].width*subDivLong; // all sub-textures are supposed to have the same resolution
+     currentTextureHeight= panoImages[map[0].textureNumber][0].height*subDivLat;
+     document.getElementById("idTextureSize").innerHTML=currentTextureWidth+"x"+currentTextureHeight;
+//     update fovYMin (texture resolution might change)
+     fovYMin=180*gl.viewportHeight/currentTextureHeight/maximalZoom;
+     if (fovY < fovYMin) fovY=fovYMin; // got from high-resolution panorama to a low-res one
+     
+     currentZoom=Math.round(1000*180*gl.viewportHeight/currentTextureHeight/fovY)/1000;
+
+     showZoom();
+//alert ("switchPanorama() - 3");
+
+
+     recalcHTR();
+//alert ("switchPanorama() - 4");
+
+     waitForPano=false;
+     detectOverArrow(lastMouseX,lastMouseY);
+     if (currentArrow>=-1) document.body.style.cursor="pointer";
+     else document.body.style.cursor="move";
+     showProgress(-1); // turn off progress indicator
+     updateSunAzimuthElevation(); // calls drawScene()
+//alert ("switchPanorama() - 5, transitionSeeThrough="+transitionSeeThrough);
+
+     setMaxZoom(); // can only be set when texture size is known
+//     setTimeout ("drawScene()", 100 ); // That works! For some reason Chrome fails first drawScene() after loading new texture.
+     if (settings.follow && (typeof(lastHeading)!='undefined')) {
+         transitionDeltaAngle=map[0].heading-lastHeading;
+         if (transitionDeltaAngle>180) transitionDeltaAngle-=360;
+         else if (transitionDeltaAngle<-180) transitionDeltaAngle+=360;
+
+//document.title="transition.deltaAngle="+transition.deltaAngle;
+     } else transitionDeltaAngle=0;
+
+
+     if (((settings.transitionTime>0) || (settings.transitionSpeed>0)) && (previousTextureNumber>=0) &&
+         ((transitionStartLLE.latitude!=transitionEndLLE.latitude) ||    // no transition if it in the same coordinate (jump to itself, altitude changes by 0.2 m)
+          (transitionStartLLE.longitude!=transitionEndLLE.longitude))  ) {
+       map[0].latitude=transitionStartLLE.latitude;
+       map[0].longitude=transitionStartLLE.longitude;
+       map[0].altitude=transitionStartLLE.altitude;
+       calcArrows();
+       drawScene();
+//alert (map[0].latitude+"\n"+map[0].longitude+"\n"+map[0].altitude+"\n");
+       transitionEndTime=(new Date).getTime()+1000*settings.transitionTime;
+       transitionSeeThrough=1.0;
+//       transition.angleLeft=transition.deltaAngle;
+//       setTimeout ("transitionBetweenPanoramas()", 300 );
+       setTimeout ("transitionBetweenPanoramas()", 100 );
+//       requestAnimFrame(transitionBetweenPanoramas, canvas);
+//       transitionBetweenPanoramas(); // TODO: replace with animate
+
+     } else  {
+//       requestAnimFrame(drawScene, canvas);
+       azimuth+=transitionDeltaAngle;
+       setTimeout ("drawScene()", 300 ); // That works! For some reason Chrome fails first drawScene() after loading new texture.
+     }
+
+  }
+
+
+  function transitionBetweenPanoramas(){
+     var lastTransitionSeeThrough=transitionSeeThrough;
+     transitionSeeThrough=(transitionEndTime- (new Date).getTime())/(1000*settings.transitionTime);
+     if (transitionSeeThrough<0) transitionSeeThrough=0;
+     var astep=transitionDeltaAngle* (lastTransitionSeeThrough-transitionSeeThrough);
+     azimuth+=astep;
+//     transition.angleLeft-=astep;
+//     if (settings.follow) {
+         var newc=(1.0-transitionSeeThrough);
+         map[0].latitude= (transitionSeeThrough*transitionStartLLE.latitude+ newc*transitionEndLLE.latitude);
+         map[0].longitude=(transitionSeeThrough*transitionStartLLE.longitude+newc*transitionEndLLE.longitude);
+         map[0].altitude=(transitionSeeThrough*transitionStartLLE.altitude+newc*transitionEndLLE.altitude);
+         calcArrows();
+//     }
+     drawScene();
+ //     if (transitionSeeThrough>0) setTimeout ("transitionBetweenPanoramas()", 1000*settings.transitionTime/settings.transitionSteps);
+//     if (transitionSeeThrough>0) requestAnimFrame(transitionBetweenPanoramas, canvas);
+     if (lastTransitionSeeThrough>0) requestAnimFrame(transitionBetweenPanoramas, canvas);
+//     if (lastTransitionSeeThrough>0) setTimeout ("transitionBetweenPanoramas()", 100 );
+
+//     else  azimuth+=transition.angleLeft; // should be 0?
+  }
+
+
+
+  function calcArrows() {
+     arrows=Array(map.length);
+     arrows[0]={angle:0,     // degrees, - direction?
+                down:0,      // meters down
+                distance:0,  // distance
+                type:"c"};   // "a" - arrow, "c" camera ""
+     for (var i=1;i<map.length;i++) {
+       lat=(map[i].latitude+map[0].latitude)/2;
+       dlat=map[i].latitude-map[0].latitude;
+       dlong=(map[i].longitude-map[0].longitude)*Math.cos(lat*Math.PI/180);
+       map[i].azimuth=(180/Math.PI) * Math.atan2(dlong, dlat); // dlong is scaled by cos(dlat)
+       map[i].distance=Math.PI*earthRadius*Math.sqrt(dlong*dlong+dlat*dlat)/180;
+       map[i].height=map[i].altitude-map[0].altitude;
+       arrows[i]={};
+       if (map[i].distance>settings.as_camera) {
+         arrows[i].angle=-map[i].azimuth;
+         arrows[i].down=map[0].aboveGround;
+         arrows[i].distance= arrows_away; // use map[i].distance when needed?
+         arrows[i].type='a';
+       } else {
+         arrows[i].angle=   -map[i].azimuth;
+         arrows[i].down=    -(map[i].height+map[i].aboveGround-map[0].aboveGround);
+         arrows[i].distance= map[i].distance; // use map[i].distance when needed?
+         arrows[i].type='c';
+       }
+     }
+  }
+  function recalcHTR() {
+     var newRotationMatrix = createRotationMatrix(-map[0].heading, [0, 1, 0]);
+     newRotationMatrix  = newRotationMatrix.x(createRotationMatrix(map[0].tilt-90, [1, 0, 0]));
+     newRotationMatrix =  newRotationMatrix.x(createRotationMatrix(map[0].roll, [0, 0, 1])); ///
+     panoramaRotationMatrix = newRotationMatrix.x(createRotationMatrix(-90, [0, 1, 0]));
+  }
+
+
+  var sceneDrawn=false;
+  
+  var planView;
+
+  function place_points(nodes) {
+  
+     if ((nodes.length==0) || (typeof(nodes[0].latitude)=="undefined")) {
+	display_error("The route is undefined or does not exist. Please provide the correct route name in the url as '...html?kml=route-name&'");
+	document.getElementById("idPermanentLink_div").style.display="none";
+	$("#idSettingsDialog").hide();
+	webGLStart();
+	return;
+     }
+      /*
+      for (var i=0;i<nodes.length;i++) {
+	  place_point(nodes[i],i);
+      }
+      
+      osm_set_current_position(nodes[0]);
+      */
+      webGLStart();
+  }
+
+  function place_points_nowebgl(nodes) {
+
+     if ((nodes.length==0) || (typeof(nodes[0].latitude)=="undefined")) {
+	display_error("The route is undefined or does not exist. Please provide the correct route name in the url as '...html?kml=route-name&'");
+	document.getElementById("idPermanentLink_div").style.display="none";
+	$("#idSettingsDialog").hide();
+	return;
+     }
+    
+      for (var i=0;i<nodes.length;i++) {
+	  place_point(nodes[i],i);
+      }
+      
+      osm_set_current_position(nodes[0]);
+
+      settings.start = nodes[0].href.substr(nodes[0].href.lastIndexOf('/')+1);
+       
+      clickedArrow(0);
+  }
+
+  function webGLStart() {
+    //parseURL();
+    //applySettings();
+    resize();
+    document.body.style.cursor="wait";
+//    var canvas = document.getElementById("pano-canvas");
+    canvas = document.getElementById("pano-canvas");
+    planView = document.getElementById("idPlanView");
+
+    initGL(canvas);
+    initShaders();
+    initBuffers();
+    initTextures();
+    initArrowTexture();
+    initEyesisTexture();
+    initSunTexture();
+    initFootprintsBackpackTexture();
+    initDotTexture();
+
+    var url=serverURL+"?kml="+settings.kml+"&range="+settings.range+"&map=all";
+
+    $("#idShowKML").attr("href","display_kml.php?id="+settings.kml);
+
+    if (settings.mask!="") url+="&mask="+settings.mask; // use second KML file to overwrite main KML file settings
+    if (settings.map!="") url+="&map="+settings.map;   // specify if full map rebuild is needed (default - sequential) or if interpolation for "visibility=0" is needed
+//    if (settings.Visibility3d) url+="&v3d"; 
+    if ((typeof(settings.view)!="undefined")  && (settings.view))    url+="&view";   // force view only mode
+    if ((typeof(settings.proto)!="undefined") && (settings.proto!="")) url+="&proto="+settings.proto; // use this KML file as a prototype for kml= (copy to kml if kml does not exist)
+
+
+    if (settings.start!="") url+="&href="+settings.start;
+    requestKml(url,kmlGot);
+
+    gl.clearColor(0.0, 0.0, 0.0, 1.0);
+
+    gl.clearDepth(1.0);
+
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+
+    canvas.onmousedown = handleMouseDown;
+    document.onmouseup = handleMouseUp;
+    document.onmousemove = handleMouseMove;
+    document.onkeyup = handleKeyUp;
+
+//     if (window.addEventListener)
+//         window.addEventListener('DOMMouseScroll', wheelEvent, false);
+//         window.onmousewheel = document.onmousewheel = wheelEvent;
+
+    if (canvas.addEventListener) canvas.addEventListener('DOMMouseScroll', wheelEvent, false);
+    if (planView.addEventListener) planView.addEventListener('DOMMouseScroll', wheelEvent, false);
+
+    canvas.onmousewheel = canvas.onmousewheel = wheelEvent;
+    planView.onmousewheel = wheelEvent;
+
+
+//TODO: - move elsewhere
+    document.getElementById("idEditMode").checked=editEnabled;
+    document.getElementById("idShowPlan").checked=showPlan;
+    document.getElementById("idShowCams").checked=showCams;
+    document.getElementById("idClickCams").checked=clickCams;
+    document.getElementById("idShowLabels").checked=settings.labels;
+    if (settings.markVisibility3d && settings.edit)  document.getElementById("idSelectVisibility").checked=true;
+    else                                             document.getElementById("idSelectKeyPoints").checked=true;
+//idEnableVerticalMove
+    document.getElementById("idEnableVerticalMove").checked=verticalEnabled;
+    resize(); // if the table height has changed
+
+  }
+
+
+
+  var margins;
+  var marginsSet=false;
+
+  function resize(){
+  
+    var frame = document.getElementById("webgl");
+    if (!marginsSet) {
+      margins=  window.innerWidth-document.getElementById("webgl").offsetWidth;
+    }
+    //var height = document.body.clientHeight-document.getElementById("table").offsetHeight-margins; // body margin should be 0 or get current margins from offesWidth
+    var height = document.body.clientHeight-margins; // body margin should be 0 or get current margins from offesWidth
+
+    var width= window.innerWidth-margins;
+
+    var windowheight = window.innerHeight;
+    frame.style.height = height + "px";   
+    frame.style.width =  width + "px";   
+    document.getElementById("pano-canvas").style.height = height + "px";
+    document.getElementById("pano-canvas").style.width =  width + "px";
+    document.getElementById("pano-canvas").height = height;
+    document.getElementById("pano-canvas").width =  width;
+
+    document.getElementById("idDivProgressBar").style.top =  (height/2+62) + "px";
+    document.getElementById("idDivProgressBar").style.left = (width/2-62) + "px";
+
+
+//    if (marginsSet) { // firefox crashed sometimes, will disable resize until scene was drawn at least once
+    if (sceneDrawn) {
+      gl.viewportWidth = width;
+      gl.viewportHeight = height;
+      gl.viewport(0, 0, width, height);
+      if (settings.keepZoom) {
+        fovY=180*gl.viewportHeight/currentTextureHeight/currentZoom;
+        fovYMin=180*gl.viewportHeight/currentTextureHeight/maximalZoom;
+        if ((fovY < fovYMin) || (fovY > fovYMax)) {
+          if (fovY < fovYMin) fovY=fovYMin;
+          if (fovY > fovYMax) fovY=fovYMax;
+          currentZoom=Math.round(1000*180*gl.viewportHeight/currentTextureHeight/fovY)/1000; // show zoom if it chnaged
+          showZoom();
+        }
+      } else {
+        fovYMin=180*gl.viewportHeight/currentTextureHeight/maximalZoom;
+        if (fovY < fovYMin) fovY=fovYMin;
+        currentZoom=Math.round(1000*180*gl.viewportHeight/currentTextureHeight/fovY)/1000;
+        showZoom();
+      }
+      update_fovY();
+      drawScene();
+    }
+    marginsSet=true;
+  }
+
+
+// show progress bar, if neghative - hide
+function showProgress (fraction) {
+// TODO: place in the center
+//    document.getElementById("pano-canvas").height = height;
+//    document.getElementById("pano-canvas").width =  width;
+
+  var id=document.getElementById("idProgressBar");
+  if (fraction<0) {
+    $('#idDivProgressBar').hide();
+    id.style.display="none";
+  } else {
+    id.style.alt=Math.round (fraction*100)+"%";
+    id.style.backgroundPosition=Math.round (-120+fraction*121)+"px 0px";
+    id.style.display="";
+    $('#idDivProgressBar').show();
+  }
+}
+function setMaxZoom() {
+//  var minimalZoom=.01; // relative to texture pixels (calculated from fovYMax)
+  if (currentTextureHeight<=0) return; // do nothing until defined (at least one texture loaded)
+  var minimalZoom=180*gl.viewportHeight/currentTextureHeight/fovYMax;
+  maximalZoom=parseFloat(document.getElementById("idMaxZoom").value);
+  if (maximalZoom<minimalZoom) {
+     maximalZoom=0.01*Math.round(100*minimalZoom*2); // at least 2:1 range
+     document.getElementById("idMaxZoom").value=maximalZoom;
+  }
+  fovYMin=180*gl.viewportHeight/currentTextureHeight/maximalZoom;
+}
+function setZoom() {
+//     document.title="waszoom="+currentZoom+" was-fovY="+fovY+ " currentTextureHeight="+currentTextureHeight;
+     currentZoom=parseFloat(document.getElementById("idZoom").value);
+     fovY=180*gl.viewportHeight/currentTextureHeight/currentZoom;
+     update_fovY();
+//     document.title+=" zoom="+currentZoom+" fovY="+fovY;
+     drawScene();
+}
+
+function update_fovY(){
+    settings.fovy = Math.round(fovY*10)/10;
+}
+
+function showZoom() {
+     document.getElementById("idZoom").value=currentZoom;
+}
+
+function changeEditMode(checked) {
+   editEnabled=checked;
+   drawScene();
+   resize(); // if the table height has changed
+}
+function changeShowCams(checked) {
+   showCams=checked;
+   drawScene();
+}
+function changeClickCams(checked) {
+   clickCams=checked;
+   drawScene();
+}
+function changeShowLabels(checked) {
+   settings.labels=checked;
+   drawScene();
+}
+
+function changeVerticalMove(checked) {
+//idEnableVerticalMove
+   verticalEnabled=checked;
+   drawScene();
+}
+
+function cloneEyesis(currentArrow) { // copy current camera to pair (ghost/edit, show control fields)
+   floatingEyesisNum=currentArrow;
+   floatingEyesis.angle=arrows[currentArrow].angle; // undefioned here
+   floatingEyesis.down=arrows[currentArrow].down;
+   floatingEyesis.distance=Math.abs(arrows[currentArrow].distance);
+//document.title="floatingEyesisNum="+floatingEyesisNum+" currentArrow="+currentArrow+" arrows[currentArrow].angle="+arrows[currentArrow].angle+" floatingEyesis.angle="+floatingEyesis.angle;
+   document.getElementById("idModifiedAzimuth").value=      -Math.round(100*floatingEyesis.angle)/100;
+   document.getElementById("idOriginalAzimuth").innerHTML=  -Math.round(100*floatingEyesis.angle)/100;
+   document.getElementById("idModifiedElevation").value=    -Math.round(100*floatingEyesis.down)/100;
+   document.getElementById("idOriginalElevation").innerHTML=-Math.round(100*floatingEyesis.down)/100;
+   document.getElementById("idModifiedDistance").value=      Math.round(100*floatingEyesis.distance)/100;
+   document.getElementById("idOriginalDistance").innerHTML=  Math.round(100*floatingEyesis.distance)/100;
+   document.getElementById("idFloatingNodeName").innerHTML=  map[currentArrow].name;
+   document.getElementById("idFloatingNodeDescription").innerHTML=  map[currentArrow].description;
+   document.getElementById("idFloatingNodeAttributes").innerHTML= "&nbsp;"+ ((map[currentArrow].visibility!==false)?"Keypoint":"----")+"&nbsp;"+((map[currentArrow].open!==false)?"visible":"hidden");
+   document.getElementById("idFloatingEyesis").style.display="";
+
+showVisibilityButtons(currentArrow);
+   drawScene();
+//TODO: Create new icon on the map (noo coordinates yet)
+   updatePositionLLEAndMap();  //TODO: will also move the new icon
+   document.getElementById("idOriginalCameraLongitude").innerHTML=document.getElementById("idCameraLongitude").innerHTML;
+   document.getElementById("idOriginalCameraLatitude").innerHTML=document.getElementById("idCameraLatitude").innerHTML;
+   document.getElementById("idOriginalCameraElevation").innerHTML=document.getElementById("idCameraElevation").innerHTML;
+  
+
+}
+function showVisibilityButtons(currentArrow) {
+//   if (floatingEyesisNum<=0) document.getElementById("idVisibilityHideSeqSpan").style.display="none";
+// Or should tghese buttons be shown only when settings.markVisibility3d is set ("ghosts" for invisible, nof for non-key points?)
+   document.getElementById("idVisibilityHideFarSpan").style.display="none";
+   document.getElementById("idVisibilityTrimFarSpan").style.display="none";
+   document.getElementById("idVisibilityShowOneSpan").style.display="none";
+   document.getElementById("idVisibilityShowSeqSpan").style.display="none";
+   document.getElementById("idVisibilityHideOneSpan").style.display="none";
+   document.getElementById("idVisibilityHideSeqSpan").style.display="none";
+   document.getElementById("idVisibilityClearSpan").style.display="none";
+
+ document.title+=" >>"+currentArrow+"<<"+settings.edit+":"+settings.markVisibility3d;
+   if (!settings.edit || settings.markVisibility3d) document.getElementById("idKeypointButtons").style.display="none";
+   else document.getElementById("idKeypointButtons").style.display="";
+
+
+
+   if (!settings.edit || !settings.markVisibility3d) document.getElementById("idVisibilityButtons").style.display="none";
+   else {
+     organizeVisibilityRanges();
+     var index=map[currentArrow].name-map[0].name;
+     var range=map[0].v3d;
+     if (currentArrow==0) {
+       document.getElementById("idVisibilityClearSpan").style.display="";
+     } else {     
+       var state=locateVisibilityRange(index, range);
+//document.title="index="+index+" rIndex="+state.rIndex+" visibility="+state.visibility;
+// Hide all, then show needed
+       if (state.visibility) {
+// Is it the range that includes 0?
+         if (((typeof(range[state.rIndex].from)=='undefined') || (range[state.rIndex].from<0)) &&
+             ((typeof(range[state.rIndex].to)=='undefined') || (range[state.rIndex].to>00))) {
+           document.getElementById("idVisibilityHideFarSpan").style.display="";
+// are there other ranges father than this?
+           if (((index<0) && (state.rIndex>0)) || ((index>0) && (state.rIndex<(range.length-1)))) {
+             document.getElementById("idVisibilityTrimFarSpan").style.display="";
+           }
+         } else { // not the nearest to 0 range
+           document.getElementById("idVisibilityHideOneSpan").style.display="";
+           document.getElementById("idVisibilityHideSeqSpan").style.display="";
+         }
+       } else { // selected point is currently invisible
+         document.getElementById("idVisibilityShowOneSpan").style.display="";
+         document.getElementById("idVisibilityShowSeqSpan").style.display="";
+       }
+     }
+     document.getElementById("idVisibilityButtons").style.display="";
+   }
+}
+
+function organizeVisibilityRanges(){
+  if ((typeof(map[0].v3d)=="undefined") ||(map[0].v3d.length==0)){ // convert none visible to all visible
+   map[0].v3d=[{}]; // all points are visible, from -infinity to +infinity
+  }
+/*
+  var debugStr="organizeVisibilityRanges() - input:\n";
+  for (var i=0;i<map[0].v3d.length;i++) {
+     debugStr+="from:"+map[0].v3d[i].from+" to:"+map[0].v3d[i].to+"\n";
+  }
+  alert (debugStr);
+*/
+//  remove wrong (from>to) ranges
+  var tmp=[];
+  for (var i=0;i<map[0].v3d.length;i++) {
+    if ((typeof(map[0].v3d[i].from)=='undefined') ||
+        (typeof(map[0].v3d[i].to)=='undefined') ||
+        (map[0].v3d[i].to>=map[0].v3d[i].from)) tmp.push(map[0].v3d[i]);
+  }
+  map[0].v3d=tmp;
+/*
+  var debugStr="organizeVisibilityRanges() - removed wrong:\n";
+  for (var i=0;i<map[0].v3d.length;i++) {
+     debugStr+="from:"+map[0].v3d[i].from+" to:"+map[0].v3d[i].to+"\n";
+  }
+  alert (debugStr);
+*/
+
+  var ordered=false;
+// order existent ranges by lower limits
+  while (!ordered) {
+     ordered=true;
+     for (var i=0;i<(map[0].v3d.length-1);i++) {
+       if (((typeof(map[0].v3d[i+1].from)=='undefined') && (typeof(map[0].v3d[i].from)!='undefined')) ||
+           ((typeof(map[0].v3d[i+1].from)!='undefined') && (typeof(map[0].v3d[i].from)!='undefined') &&  (map[0].v3d[i+1].from<map[0].v3d[i].from))) {
+         var tmp=map[0].v3d[i+1];
+         map[0].v3d[i+1]=map[0].v3d[i];
+         map[0].v3d[i]=tmp;
+         ordered=false;
+       } 
+     }
+  }
+/*
+  var debugStr="2:\n";
+  for (var i=0;i<map[0].v3d.length;i++) {
+     debugStr+="from:"+map[0].v3d[i].from+" to:"+map[0].v3d[i].to+"\n";
+  }
+  alert (debugStr);
+*/
+// try to merge ranges
+  var newVis=[map[0].v3d[0]];
+  for (var i=1;i<map[0].v3d.length;i++) {
+    if ((typeof(map[0].v3d[i].from)=='undefined') || (typeof(newVis[newVis.length-1].to)=='undefined') || (map[0].v3d[i].from<=(newVis[newVis.length-1].to+1))){
+//document.title+=" "+i+"A";
+       if (typeof(newVis[newVis.length-1].to)!='undefined') {
+// merge
+//document.title+=" "+i+"B";
+          if (typeof(map[0].v3d[i].to)=='undefined') delete newVis[newVis.length-1].to;
+          else if (map[0].v3d[i].to > newVis[newVis.length-1].to) newVis[newVis.length-1].to=map[0].v3d[i].to;
+       } // if the upper limit was already infinity - no changes in the original when merging
+//document.title+=" "+i+"C";
+    } else {
+       newVis.push(map[0].v3d[i]); // just copy to the new array
+//document.title+=" "+i+"D("+newVis.length+")";
+    }
+  }
+  map[0].v3d=newVis;
+// Now the visibility ranges should be ordered and non-overlapping (even not "touching" each other)
+// let us verify it works 
+/*
+  var debugStr="organizeVisibilityRanges():\n";
+  for (var i=0;i<map[0].v3d.length;i++) {
+     debugStr+="from:"+map[0].v3d[i].from+" to:"+map[0].v3d[i].to+"\n";
+  }
+  alert (debugStr);
+*/
+}
+
+// returns a pair of {visibility:true/false, rIndex: range index} (if invisible - rIndex is next towards 0
+function locateVisibilityRange(index, // index (map[i].name-map[0].name) to determine visibility range
+                               ranges) { // map[0].vsd -array of ordered ranges ( after organizeVisibilityRanges())
+  var rIndex;
+
+  if (index>0) for (rIndex=ranges.length-1;rIndex>=0;rIndex--) {
+    if ((typeof(ranges[rIndex].from)=='undefined') || (ranges[rIndex].from <= index)) break;
+  } else       for (rIndex=0; rIndex<ranges.length; rIndex++) { //index<0 (index==0 filtered earlier)
+    if ((typeof(ranges[rIndex].to)=='undefined') || (ranges[rIndex].to >= index)) break;
+  }
+
+  var visibility=(((typeof(ranges[rIndex].from)=='undefined') || (ranges[rIndex].from<=index)) &&
+                  ((typeof(ranges[rIndex].to)==  'undefined') || (ranges[rIndex].to>=index)));
+//alert("1 - locateVisibilityRange():\nindex="+index+"\nrIndex="+rIndex+"\nvisibility="+visibility);
+/*
+  if (!visibility) {// make range either include index or be closer to the 0 point
+    if (index <0) rIndex++;
+    else          rIndex--;
+  }
+*/
+//document.title="visibility:"+visibility+" rIndex:"+rIndex;
+  return {visibility:visibility,rIndex:rIndex};
+}
+//document.title="index="+index+" rIndex="+state.rIndex+" visibility="+state.visibility;
+
+function set3dVisibility(id) {
+  var currentArrow=floatingEyesisNum; //global
+  var index=map[currentArrow].name-map[0].name;
+  var range=map[0].v3d;
+  var state=locateVisibilityRange(index, range);
+  if ((index==0) && (id!="idVisibilityClear")) {
+    alert ('Error in set3dVisibility() - when editing visibility of self, only "Clear v3d" is possible');
+    return;
+  }
+  switch (id) {
+     case "idVisibilityClear":range=[{}]; break;
+     case "idVisibilityHideFar":
+// delete all outer ranges, then fall through to "trim"
+       if (index<0) {
+         if (state.rIndex>0) {
+// invalidate first ranges - they will be removed by organizeVisibilityRanges();
+           for (var i=0; i<state.rIndex;i++) {
+             range[i].from=1;
+             range[i].to=-1;
+           }
+         }
+       } else {
+// invalidate last ranges - they will be removed by organizeVisibilityRanges();
+         if (state.rIndex<(range.length-1)) {
+           for (var i=state.rIndex+1; i<range.length;i++){
+             range[i].from=1;
+             range[i].to=-1;
+           }
+         }
+       }
+     case "idVisibilityTrimFar": 
+       if (index<0) {
+         range[state.rIndex].from=index+1; // may become > .to
+       } else {
+         range[state.rIndex].to=index-1; // may become < .from
+       }
+       break;
+     case "idVisibilityShowOne":
+       range.push({from:index,to:index}); // out of order, will need organizeVisibilityRanges();
+       break;
+     case "idVisibilityShowSeq":
+//document.title="state.rIndex="+state.rIndex+" range.length="+range.length+" index="+index;
+       if ((index<0) && (state.rIndex==0)) {
+          delete range[0].from;
+       } else if (state.rIndex==(range.length-1)) {
+          delete range[range.length-1].to;
+       } else { // merge two ranges
+          if (index<0) state.rIndex--;
+          range[state.rIndex].to=range[state.rIndex+1].from; // will be actually merged in organizeVisibilityRanges();
+       }
+//document.title="index="+index+" rIndex="+state.rIndex+" length="+(range.length)+" to="+range[state.rIndex].to+" from="+range[state.rIndex].from+" 1to="+range[state.rIndex+1].to+" 1from="+range[state.rIndex+1].from;
+       break;
+     case "idVisibilityHideOne":
+// spit this range in 2
+       var newRange={from:index+1};
+       if (typeof(range[state.rIndex].to)!='undefined') newRange.to=range[state.rIndex].to;
+       range[state.rIndex].to=index-1;
+       range.push(newRange);
+       break;
+     case "idVisibilityHideSeq":
+// just invalidate current range:
+             range[state.rIndex].from=1;
+             range[state.rIndex].to=-1;
+       break;
+
+
+  }
+  map[0].v3d=range;
+  organizeVisibilityRanges();
+  calcVisibility3d(); // update 'open' property form v3d for plan/scene display
+//  saveFloatingEyesis(); // will draw scene. Or use cancelFloatingEyesis?
+  cancelFloatingEyesis(); // will draw scene. Or use cancelFloatingEyesis?
+//  showVisibilityButtons(currentArrow);
+//  drawScene();
+
+// update information, draw scene, cancel floating Eyesis?
+//  alert ("Clicked "+id);
+}
+
+function changeHighlightMode(id) {
+  settings.markVisibility3d= (id=="idSelectVisibility");
+  if (settings.markVisibility3d) {
+//    alert ("typeof(map[0].v3d)="+typeof(map[0].v3d));
+//    alert ("map[0].v3d.length="+map[0].v3d.length);
+    organizeVisibilityRanges();
+    calcVisibility3d(); // update 'open' property form v3d for plan/scene display
+    document.getElementById("idKeypointButtons").style.display="none";
+//document.title="idKeypointButtons - off";
+  } else {
+    document.getElementById("idKeypointButtons").style.display="";
+//document.title="idKeypointButtons - on";
+  }
+  
+//   if (floatingEyesisNum<=0) document.getElementById("idVisibilityHideSeqSpan").style.display="none";
+  if (floatingEyesisNum>=0) {
+    showVisibilityButtons(floatingEyesisNum);
+//document.title+=" floatingEyesisNum="+floatingEyesisNum;
+
+  }
+   
+//  if ((floatingEyesisNum>=0) && (!settings.markVisibility3d)) document.getElementById("idKeypointButtons").style.display="";
+//  else                                                        document.getElementById("idKeypointButtons").style.display="none";
+  drawScene(); 
+}
+
+
+
+function cancelFloatingEyesis(){
+   floatingEyesisNum=-1;
+   document.getElementById("idFloatingEyesis").style.display="none";
+   showInformation();
+   drawScene();
+}
+function saveFloatingEyesis(){
+  if (floatingEyesisNum>=0) { // should always be
+    map[floatingEyesisNum].latitude=floatingEyesisLLE.latitude;
+    map[floatingEyesisNum].longitude=floatingEyesisLLE.longitude;
+    map[floatingEyesisNum].altitude=floatingEyesisLLE.altitude;
+    calcArrows();
+  }
+  cancelFloatingEyesis();
+}
+
+function updatePositionControlsAndMap() {
+   document.getElementById("idModifiedAzimuth").value=   -Math.round(orientRounding*floatingEyesis.angle)/orientRounding;
+   document.getElementById("idModifiedElevation").value= -Math.round(altRounding*floatingEyesis.down)/altRounding;
+   document.getElementById("idModifiedDistance").value=  Math.round(altRounding*floatingEyesis.distance)/altRounding;
+   updatePositionLLEAndMap();
+}
+
+
+function updatePositionLLEAndMap() {
+   floatingEyesisLLE=calcCameraLLE(floatingEyesis, map[0]);
+   document.getElementById("idCameraLongitude").innerHTML=   Math.round(latLongRounding*floatingEyesisLLE.longitude)/latLongRounding;
+   document.getElementById("idCameraLatitude").innerHTML=    Math.round(latLongRounding*floatingEyesisLLE.latitude)/latLongRounding;
+   document.getElementById("idCameraElevation").innerHTML=   Math.round(altRounding*floatingEyesisLLE.altitude)/altRounding;
+
+//TODO: Update map here (moving icon of one camera - floatingEyesisLLE )
+}
+
+function calcCameraLLE(azRelevDist, thisLLE) {
+     var otherLLE={};
+     var angle=-Math.PI*azRelevDist.angle/180;
+     var dLatLong=azRelevDist.distance/earthRadius*180/Math.PI; //distance in degrees (on a big circle connecting map[0] and the camera
+     var dLat= dLatLong*Math.cos(angle);
+     var dLong=dLatLong*Math.sin(angle)/Math.cos((thisLLE.latitude+dLat/2)*Math.PI/180);
+     var dAlt=-azRelevDist.down;
+     otherLLE.latitude=thisLLE.latitude+dLat;
+     otherLLE.longitude=thisLLE.longitude+dLong;
+     otherLLE.altitude=thisLLE.altitude+dAlt;
+     return otherLLE;
+}
+
+function moveEyesis() {
+   floatingEyesis.angle=-parseFloat(document.getElementById("idModifiedAzimuth").value);
+   floatingEyesis.down=-parseFloat(document.getElementById("idModifiedElevation").value);
+   floatingEyesis.distance=parseFloat(document.getElementById("idModifiedDistance").value);
+   updatePositionLLEAndMap();
+   drawScene();
+
+}
+
+function sunAzimuthElevation(){
+   Sun.azimuth=parseFloat(document.getElementById("idSunAzimuth").value);
+   Sun.elevation=parseFloat(document.getElementById("idSunElevation").value);
+   drawScene();
+}
+
+function updateSunAzimuthElevation(){
+//      <tr><td>Timestamp:</td><td><span id="idTimeStamp">&nbsp;</span></td> </tr>
+   document.getElementById("idTimeStamp").innerHTML=
+                    ((map[0].time.month<10)?"0":"")+map[0].time.month+"/"+
+                      ((map[0].time.day<10)?"0":"")+map[0].time.day+"/"+
+                                                    map[0].time.year+" "+
+                     ((map[0].time.hour<10)?"0":"")+map[0].time.hour+":"+
+                   ((map[0].time.minute<10)?"0":"")+map[0].time.minute+":"+
+                   ((map[0].time.second<10)?"0":"")+map[0].time.second+" UTC";
+/*
+	function CalcSunPos(latitude, longitude, hh, mm, ss, year, month, day) 
+		return {azimuth:azimuth,elevation:elevation};
+*/
+
+//TODO: modify CalcSunPos javascript file to use standard longitude (+E, -W) !!! - DONE
+
+   var sunPosition=CalcSunPos(map[0].latitude, map[0].longitude, map[0].time.hour, map[0].time.minute, map[0].time.second, map[0].time.year, map[0].time.month, map[0].time.day) ;
+   Sun.azimuth=sunPosition.azimuth;
+   Sun.elevation=sunPosition.elevation;
+   document.getElementById("idSunAzimuth").value=Math.round(orientRounding*Sun.azimuth)/orientRounding;
+   document.getElementById("idSunElevation").value=Math.round(orientRounding*Sun.elevation)/orientRounding;
+   drawScene();
+
+}
+function levelView() {
+   elevation=0.0;
+   if (showInfo) showInformation();
+//   setTimeout ("drawScene()", 300 ); // That works! For some reason Chrome fails first drawScene() after loading new texture.
+   drawScene();
+}
+
+function turnView() {
+   azimuth+=90.0;
+   if (azimuth>360) azimuth-=360;
+   if (showInfo) showInformation();
+//   setTimeout ("drawScene()", 300 ); // That works! For some reason Chrome fails first drawScene() after loading new texture.
+   drawScene();
+}
+
+
+function parseURL() {
+
+  get_filelist();
+
+  var parameters=location.href.replace(/\?/ig,"&").split("&");
+  for (var i=0;i<parameters.length;i++) parameters[i]=parameters[i].split("=");
+  for (var i=1;i<parameters.length;i++) {
+     switch (parameters[i][0]) {
+//       case "edit": settings.edit=true; break;
+       case "n":
+       case "ntxt": settings.numTextures=parseInt(parameters[i][1]); break;
+       case "kml":  settings.kml= parameters[i][1]; break;
+       case "start":settings.start= parameters[i][1]; break;
+       case "as-camera":
+       case "as_camera":settings.as_camera= parseFloat(parameters[i][1]); break;
+       case "range":settings.range= parseFloat(parameters[i][1]); break;
+       case "labels": if (parameters[i][1]=="true") settings.labels=true; else settings.labels=false; break;
+       case "keepzoom": if (parameters[i][1]=="true") settings.keepZoom=true; else settings.keepZoom=false; break;
+       case "closest2d": if (parameters[i][1]=="true") settings.closestIn2d=true; else settings.closestIn2d=false; break;
+       case "seethrough": settings.seethrough= parseFloat(parameters[i][1]); break;
+       case "transition": settings.transitionTime= parseFloat(parameters[i][1]); break;
+       case "speed":      settings.transitionSpeed= parseFloat(parameters[i][1]); break;
+//       case "transition-steps": settings.transitionSteps=parseInt(parameters[i][1]); break;
+       case "mask":    settings.mask=parameters[i][1]; break;
+       case "map":     settings.map=parameters[i][1]; break;
+       case "follow": if (parameters[i][1]=="true") settings.follow=true; else settings.follow=false; break;
+//       case "v3d": settings.Visibility3d=true; break;
+       case "mv3d": if (parameters[i][1]=="true") settings.markVisibility3d=true; else settings.markVisibility3d=false; break;
+       case "azimuth": azimuth=parseFloat(parameters[i][1]); break;
+       case "elevation": elevation=parseFloat(parameters[i][1]); break;
+       case "proto":  settings.proto= parameters[i][1]; break;
+       case "view":   settings.view=true; break;
+       case "fovy":  settings.fovy= parameters[i][1]; break;
+     }
+     if (settings.numTextures <2) settings.numTextures = 2; // 2 is minimal
+     if (settings.as_camera> (0.95*worldRadius)) settings.as_camera = 0.95*worldRadius; // will not be visible outside of the sphere
+  }
+
+  if (settings.proto=="") settings.proto = settings.kml;
+
+//  alert ('settings.Visibility3d='+settings.Visibility3d);
+}
+
+
+
+
+function applySettings() {
+  setWritableMode(settings.edit);
+  panoTexturesSrc=Array(settings.numTextures);
+  panoTextures=Array(panoTexturesSrc.length);
+  panoImages=  Array(panoTexturesSrc.length);
+  panoLoadedSubTextures=  Array(panoTexturesSrc.length);
+  for (var i=0; i<panoTexturesSrc.length; i++) {
+    panoTextures[i]=Array(numSubTextures);
+    panoImages[i]=  Array(numSubTextures);
+  }
+  mapIndices=  Array(panoTexturesSrc.length); // from texture number to node number
+
+  showPlan=settings.edit; // edit enable mode is set later, when the kml is read. but show plan should be set just once at startup
+  disableDragging(document);
+
+  $("#seeThroughSlider").val(settings.seethrough*100);
+  $("#seeThroughInput").val(settings.seethrough);
+
+  fovY = settings.fovy;
+  console.log("Apply Settings: "+fovY);
+}
+
+function setWritableMode(enable) {
+  if (!enable && settings.edit) changeEditMode(false); // turn off edit mode if file is not writeable anymore (unlikely)
+  var oldEnable=settings.edit;
+  settings.edit=enable;
+
+  $("#idSunAzimuth").attr("disabled",(!settings.edit));
+  $("#idSunElevation").attr("disabled",(!settings.edit));
+
+  var displayWritable=settings.edit?"":"none";
+  document.getElementById("idShowEditMode").style.display=displayWritable;
+  document.getElementById("IdSeeThroughTd").style.display=displayWritable;
+  document.getElementById("idExtraInfo").style.display=displayWritable;
+  document.getElementById("idSelectHighlightMode").style.display=displayWritable;
+  document.getElementById("idLongitude").disabled=!settings.edit;
+  document.getElementById("idLatitude").disabled=!settings.edit;
+  document.getElementById("idAltitude").disabled=!settings.edit;
+  document.getElementById("idHeading").disabled=!settings.edit;
+  document.getElementById("idTilt").disabled=!settings.edit;
+  document.getElementById("idRoll").disabled=!settings.edit;
+  document.getElementById("idNodeDescription").disabled=!settings.edit;
+  if (settings.edit!=oldEnable) {
+   document.getElementById("idMaxZoom").value=settings.edit?8:1;
+   resize(); // if the table height has changed
+  }
+}
+
+// related to plan view
+function changeShowPlan(checked) {
+   showPlan=checked;
+   showPlanView(showPlan);
+
+}
+
+///http://stackoverflow.com/questions/1807334/js-how-to-prevent-the-default-action-on-images-in-browsers
+function cancellingEventHandler(evt) {
+        evt = evt || window.event;
+        if (evt.preventDefault) {
+                evt.preventDefault();
+        } else if (typeof evt.returnValue !== "undefined") {
+                evt.returnValue = false;
+        }
+        return false;
+}
+
+function disableDragging(node) {
+        node.ondragstart = cancellingEventHandler;
+        node.ondraggesture = cancellingEventHandler;
+}
+function disableDraggingSelecting(node) {
+        node.ondragstart = cancellingEventHandler;
+        node.ondraggesture = cancellingEventHandler;
+        node.onselectstart = cancellingEventHandler;
+}
+
+function setNodeData(id) {
+  if (floatingEyesisNum==0) {  // con not modify map[0] if it is tied to floating Eyesis
+    showInformation();
+    return;
+  }
+  switch (id) {
+    case "idLongitude":       map[0].longitude=parseFloat(document.getElementById(id).value); break;
+    case "idLatitude":        map[0].latitude= parseFloat(document.getElementById(id).value); break;
+    case "idAltitude":        map[0].altitude= parseFloat(document.getElementById(id).value); break;
+    case "idNodeDescription": map[0].description=         document.getElementById(id).value;  break;
+    case "idKeyPoint":        map[0].visibility=          document.getElementById(id).checked;break;
+  }
+//document.title="map[0].visibility="+map[0].visibility;
+  calcArrows();
+  drawScene();
+}
+
+// calculate "open" field in the map, according to map[].v3d array. Only needed when settings.Visibility3d is true (when false, property'open' is read from the kml)
+function calcVisibility3d() {
+//document.title="";
+  var thisNodeNumber=map[0].name; //parseInt(map[0].name);
+  if (typeof(map[0].v3d)=='undefined') for (var i=1; i<map.length;i++) map[i].open=true;
+  else for (var i=1; i<map.length;i++) {
+    map[i].open=false;
+    var otherNodeNumber=map[i].name; //parseInt(map[i].name);
+    for (var j=0;j<map[0].v3d.length;j++) {
+//document.title+=map[0].v3d[j].from+":";
+//document.title+=map[0].v3d[j].to+"-";
+       if (((typeof(map[0].v3d[j].from)=='undefined') || (otherNodeNumber>=(thisNodeNumber+map[0].v3d[j].from))) &&
+           ((typeof(map[0].v3d[j].to)  =='undefined') || (otherNodeNumber<=(thisNodeNumber+map[0].v3d[j].to)))) {
+         map[i].open=true;
+         break;
+       }
+    }
+//document.title+=" "+i+":"+map[i].open;
+
+  }
+}
+//    foreach ( $world[$this]['v3d'] as $range) {
+//       if ((!isset ($range['from']) || ($other>=($this+$range['from']))) && (!isset ($range['to']) || ($other<=($this+$range['to'])))) return 1;
+ 
+function saveToKML() {
+  if (floatingEyesisNum>=0) saveFloatingEyesis();
+  postKmlData(settings.kml, generateKML(map));
+  document.getElementById("idEditMode").checked=false;
+  changeEditMode(false);
+  clickedArrow(0); // reload saved file
+//  alert ("KML saved");
+
+}
+
+/*
+ * Move nodes that are farther than selected by the vector, move nodes between this (map[0]) and that other proportional to time distance.
+ * Should be used when all the nodes are selected (range=<large number>), otherwise too far nodes will not be moved
+ */
+function moveFarNodes() {
+  if (floatingEyesisNum>=0) {
+    var altCorr=floatingEyesisLLE.altitude-map[floatingEyesisNum].altitude;
+    var latCorr=floatingEyesisLLE.latitude-map[floatingEyesisNum].latitude;
+    var lonCorr=floatingEyesisLLE.longitude-map[floatingEyesisNum].longitude;
+    var ohref=map[floatingEyesisNum].href;
+    cancelFloatingEyesis();
+    var url=serverURL+"?kml="+settings.kml+"&href="+map[0].href+"&range="+settings.range;
+    if (settings.mask!="") url+="&mask="+settings.mask; // use second KML file to overwrite main KML file settings
+    if (settings.map!="") url+="&map="+settings.map;   // specify if full map rebuild is needed (default - sequential) or if interpolation for "visibility=0" is needed
+    if ((typeof(settings.proto)!="undefined") && (settings.proto!="")) url+="&proto="+settings.proto; // use this KML file as a prototype for kml= (copy to kml if kml does not exist)
+    url+="&ohref="+ohref+"&corr-alt="+altCorr+"&corr-lat="+latCorr+"&corr-lon="+lonCorr;
+      requestKml(url,kmlGot);
+      return;
+  }
+}
+
+
+function interpolateRange() {
+  if (floatingEyesisNum>=0) {
+    var altCorr=floatingEyesisLLE.altitude-map[floatingEyesisNum].altitude;
+    var ohref=map[floatingEyesisNum].href;
+    cancelFloatingEyesis();
+    var url=serverURL+"?kml="+settings.kml+"&href="+map[0].href+"&range="+settings.range;
+    if (settings.mask!="") url+="&mask="+settings.mask; // use second KML file to overwrite main KML file settings
+    if (settings.map!="") url+="&map="+settings.map;   // specify if full map rebuild is needed (default - sequential) or if interpolation for "visibility=0" is needed
+    if ((typeof(settings.proto)!="undefined") && (settings.proto!="")) url+="&proto="+settings.proto; // use this KML file as a prototype for kml= (copy to kml if kml does not exist)
+    url+="&ohref="+ohref+"&interpolate-range";
+      requestKml(url,kmlGot);
+      return;
+  }
+}
+
+function previuosNextNode(forward) { // true - forward, false - backwards
+  var diff;
+  var index=0;
+  var min=-1;
+  for (var i=1; i<map.length;i++) {
+    diff=(forward?1:-1)*(map[i].name-map[0].name);
+    if ((diff>0) && ((min<0) || (min>diff))) {
+      index=i;
+      min=diff;
+    }
+  }
+  clickedArrow(index);
+}
+
+
+//http://stackoverflow.com/questions/5605588/how-to-use-requestanimationframe suggested to remove ";"
+window.requestAnimFrame = (function() {
+  return window.requestAnimationFrame ||
+         window.webkitRequestAnimationFrame ||
+         window.mozRequestAnimationFrame ||
+         window.oRequestAnimationFrame ||
+         window.msRequestAnimationFrame ||
+         function(/* function FrameRequestCallback */ callback, /* DOMElement Element */ element) {
+           window.setTimeout(callback, 1000/60);
+         };
+})();
+
+</script>
+
+
+</head>
+
+
+<!--<body onload="webGLStart();" style="margin:0px;" onresize="resize();" onselectstart="cancellingEventHandler();">-->
+<body style="margin:0px;" onresize="resize();" onselectstart="cancellingEventHandler();">
+<!--small height, so initially there will be no vertical scrollbar -->
+
+  <div id="webgl" style="width:100%;height:10px;background-color:grey;z-index:-1">
+<!--  <canvas id="pano-canvas" style="border: none;position:absolute; top:0px;left:0px;"></canvas>-->
+    <canvas id="pano-canvas" style="border: none;z-index:-1;"></canvas>
+  </div>
+  <div id="info" style="position:absolute; top:0px;left:0px;z-index:100;">
+      <div id="idDivProgressBar" style="position:absolute; width:123; height:12;">
+	  <img id="idProgressBar" src="files/percentImage.png" alt="9.5%" style="background: url(files/percentImage_back.png) top left no-repeat; padding: 0; margin: 5px 0 0 0; background-position: -110.315px 0pt; display:none;" />
+      </div>
+  </div>
+
+  <div id="idLabels"></div>
+  <div id="idPlanView" style="position:absolute; top:3px;left:3px; width:256; height:256; background: white; display:none;" onmousedown="handlePlanMouseDown(event,-2);"  ondragstart="cancellingEventHandler();" ondraggesture="cancellingEventHandler();"
+ onselectstart="cancellingEventHandler();">&nbsp;</div>
+
+    <div id="idInfo" class="gradient">
+
+	<div id="idInfo_table">
+		    <table id="table" border="1">
+		    <tr>
+
+		      <td rowspan="3">
+			  <table>
+			      <tr><td><div style="width:80px;">Longitude,&deg;</div></td><td><input id="idLongitude" size="8" value="0" onChange="setNodeData(this.id);" class="input_field"/></td></tr>
+			      <tr><td> Latutude,&deg;</td><td><input id="idLatitude"  size="8" value="0" onChange="setNodeData(this.id);" class="input_field"/></td></tr>
+			      <tr><td> Altitude, <span class="small_text">m</span></td><td><input id="idAltitude"  size="8" value="0" onChange="setNodeData(this.id);" class="input_field"/></td></tr>
+			  </table>
+		      </td>
+
+		      <td rowspan="3">
+			  <table>
+			      <tr><td> Heading,&deg;</td><td><input id="idHeading" size="5" value="0" onChange="inputHTR();" class="input_field"/></td></tr>
+			      <tr><td> Tilt,&deg;   </td><td><input id="idTilt"    size="5" value="0" onChange="inputHTR();" class="input_field"/></td></tr>
+			      <tr><td> Roll,&deg;   </td><td><input id="idRoll"    size="5" value="0" onChange="inputHTR();" class="input_field"/></td></tr>
+			  </table>
+		      </td>
+
+		      <td rowspan="3">
+			  <div>
+			  <table>
+			      <tr><td><div style="width:110px;">View azimuth,&deg;</div></td><td><button id="idViewAzimuth" onclick="turnView();" class="button">0000</button></td></tr>
+			      <tr><td><div style="width:110px;">View elevation,&deg;</div></td><td><button id="idViewElevation"  onclick="levelView();"  class="button">0000</button></td></tr>
+			      <tr><td><input type="checkbox" id="idOrtho" name="ortho" value="1" checked />Ortho</td><td></td></tr>
+			  </table>
+			  </div>
+		      </td>
+
+		      <td rowspan="3">
+			  <table>
+			      <tr><td><div style="width:100px;">Texture size:</div></td><td><span id="idTextureSize" style="font-size:12px;" >00000x0000</span></td></tr>
+			      <tr><td><div style="width:100px;">Maximal zoom:</div></td><td><input id="idMaxZoom" size="5" value="1" onChange="setMaxZoom();" class="input_field"/></td></tr>
+			      <tr><td><div style="width:100px;">Current zoom:</div></td><td><input id="idZoom"    size="5" value="1" onChange="setZoom();"    class="input_field"/></td></tr>
+			  </table>
+		      </td>
+      
+		      <td rowspan="3" valign="top">
+			  <table>
+			    <tr  id="idShowEditMode" style="display:none">
+			      <td> <input type="checkbox" id="idEditMode" name="editMode" value="1"  onclick="changeEditMode(this.checked);"/>Edit mode</td>
+			      <td> <button id="idSaveToKML" type="button" onclick="saveToKML();" class="button" >Save to KML</button></td>
+			    </tr>
+			    <tr>
+			    <td colspan="2">
+			      <table>
+			      <tr>
+				<td>
+				    <div style="width:120px;">
+					<div id="idShowPlan_tip"><input type="checkbox" id="idShowPlan" name="showPlan" value="1"  onclick="changeShowPlan(this.checked);"/>Show plan</div>
+					<div id="idShowCams_tip"><input type="checkbox" id="idShowCams" name="showCams" value="1"  onclick="changeShowCams(this.checked);"/>Show cameras</div>
+					<div id="idClickCams_tip"><input type="checkbox" id="idClickCams" name="clickCams" value="1"  onclick="changeClickCams(this.checked);"/>Click cameras</div>
+					<div id="idShowLabels_tip"><input type="checkbox" id="idShowLabels" name="showLabels" value="1"  onclick="changeShowLabels(this.checked);"/>Show labels</div>
+				    </div>
+				</td>
+				<td id="idSelectHighlightMode">
+				    <div style="width:120px;">
+				    <input type="checkbox" id="idEnableVerticalMove" name="vertMode" value="1"  onclick="changeVerticalMove(this.checked);"/>Vertical move<br/><br/>
+				    <input type="radio" id="idSelectKeyPoints"  name="selectHighlightMode" value="keypoints"  onclick="changeHighlightMode(this.id);"/>Key points<br/>
+				    <input type="radio" id="idSelectVisibility" name="selectHighlightMode" value="visibility" onclick="changeHighlightMode(this.id);"/>Visibility<br/>
+				    </div>
+				</td>
+			      </tr>
+			      </table>
+			    </td>
+			    </tr>
+			  </table>
+			</td>
+			
+			<td id="IdSeeThroughTd" rowspan="4" style="display:none;">
+			    <div id="IdSeeThroughDiv">
+				<input id="seeThroughInput" type="text" class=input_field title="SeeThrough setting" />
+				<div id="seeThroughSlider" title="SeeThrough setting" ></div>
+			    </div>
+			</td>
+
+			<td rowspan="3" valign="top">
+			    <table>
+			      <tr><td colspan="2"><div style="width:90px;">Timestamp:</div><div style="width:170px;"><span id="idTimeStamp" style="font-size:12px;" >&nbsp;</span></div></td> </tr>
+			      <tr><td><div>Sun Azimuth:</div></td><td><input id="idSunAzimuth" size="5" value="00.0" onchange="sunAzimuthElevation()" class="input_field" /></td> </tr>
+			      <tr><td><div>Sun Elevation:</div></td><td><input id="idSunElevation" size="5" value="00.0" onchange="sunAzimuthElevation()" class="input_field" /></td> </tr>
+			    </table>
+			</td>
+
+			<td rowspan="3" id="idFloatingEyesis" style="display:none;" valign="top" class="gradient" >
+			    <table  id="idFloatingEyesis_table" style="font-size:14px;">
+				<tr>
+				  <td><div style="width:115px;">Camera azimuth</div></td>
+				  <td><input id="idModifiedAzimuth" size="5" value="00.0" onchange="moveEyesis()" class="input_field"/></td>
+				  <td>(<span id="idOriginalAzimuth">00.0</span>)</td>
+				  <td>&nbsp;Lon:</td>
+				  <td><div style="width:160px"><span id="idCameraLongitude" >000.00000</span>&nbsp;(<span id="idOriginalCameraLongitude">000.00000</span>)</div></td>
+				  <td rowspan="4" >
+				      <div style="padding:3px;"><button id="idSaveCameraPosition" type="button" onclick="saveFloatingEyesis();" class="button" >Save</button></div>
+				      <div style="padding:3px;"><button id="idCancelCameraPosition" type="button" onclick="cancelFloatingEyesis();" class="button">Cancel</button></div>
+				      <div>
+						  <span id="idKeypointButtons">
+						    <span id="idCorrectAltitudeSpan"> <br/><button id="idCorrectAltitude" type="button" class="button" onclick="moveFarNodes();" style="width:80px;">Move </button></span>
+						    <span id="idInterpolateRangeSpan">     <br/><button id="idInterpolateRange" type="button" class="button" onclick="interpolateRange();" style="width:80px;">Interpolate</button></span>
+						  </span>
+				      </div>
+				      <div>
+						  <span id="idVisibilityButtons"><!-- Max 2 buttons are visible simultaneously -->
+						    <span id="idVisibilityHideFarSpan">  <br/><button id="idVisibilityHideFar" type="button" class="button" onclick="set3dVisibility(this.id);" style="width:80px;">Hide Far</button></span>
+						    <span id="idVisibilityTrimFarSpan">  <br/><button id="idVisibilityTrimFar" type="button" class="button" onclick="set3dVisibility(this.id);" style="width:80px;">Trim Far</button></span>
+						    <span id="idVisibilityShowOneSpan">  <br/><button id="idVisibilityShowOne" type="button" class="button" onclick="set3dVisibility(this.id);" style="width:80px;">Show This</button></span>
+						    <span id="idVisibilityShowSeqSpan">  <br/><button id="idVisibilityShowSeq" type="button" class="button" onclick="set3dVisibility(this.id);" style="width:85px;">Show Range</button></span>
+						    <span id="idVisibilityHideOneSpan">  <br/><button id="idVisibilityHideOne" type="button" class="button" onclick="set3dVisibility(this.id);" style="width:80px;">Hide This</button></span>
+						    <span id="idVisibilityHideSeqSpan">  <br/><button id="idVisibilityHideSeq" type="button" class="button" onclick="set3dVisibility(this.id);" style="width:80px;">Hide Range</button></span>
+						    <span id="idVisibilityClearSpan">    <br/><br/><button id="idVisibilityClear"   type="button" class="button" onclick="set3dVisibility(this.id);" style="width:80px;">Clear v3d</button></span>
+						  </span>
+				      </div>
+				  </td>
+				</tr>
+				<tr>
+				  <td>Camera distance, <span style="font-size:10px;">m</span></td><td><input id="idModifiedDistance" size="5" value="00.0" onchange="moveEyesis()" class="input_field" /></td><td>(<span id="idOriginalDistance">00.0</span>m) </td>
+				  <td>&nbsp;Lat:</td><td><span id="idCameraLatitude" >000.00000</span>&nbsp;(<span id="idOriginalCameraLatitude">000.00000</span>)</td>
+				</tr>
+				<tr>
+				  <td>Relative elevation, <span style="font-size:10px;">m</span></td><td><input id="idModifiedElevation" size="5" value="00.0" onchange="moveEyesis()" class="input_field" /></td><td>(<span id="idOriginalElevation">00.0</span>m)</td>
+				  <td>&nbsp;Alt:</td><td><span id="idCameraElevation" >000.00</span>m&nbsp;(<span id="idOriginalCameraElevation">000.00</span>m)</td>
+				</tr>
+				<tr>
+				    <td>Description:</td>
+				    <td colspan="4"><span id="idFloatingNodeName"></span>:<span id="idFloatingNodeDescription"></span></td>
+				</tr>
+				<tr>
+				    <td><span id="idFloatingNodeAttributes"></span></td>
+				</tr>
+			    </table>
+			</td>
+
+		    </tr>
+
+		    <tr>
+		    </tr>
+
+		    <tr>
+		    </tr>
+
+		    <tr>
+			<td>Description:</td>
+			<td colspan="2"><span id="idNodeName"></span>:<input id="idNodeDescription" size="45" value="" onChange="setNodeData(this.id);" class="input_field" style="font-size:12px;" /></td>
+			<td>
+			    Navigation:
+			    <button id="idBack" type="button" class=button onclick="previuosNextNode(false);">&lt;</button>
+			    <button id="idForward" type="button" class=button onclick="previuosNextNode(true);">&gt;</button>
+			</td>
+			<td colspan="1">
+			    <span id="idExtraInfo">
+				Keypoint
+				<input type="checkbox" id="idKeyPoint" name="keyPoint" value="1"  onclick="setNodeData(this.id);"/>
+				Open
+				<input type="checkbox" id="idOpenPoint" name="openPoint" value="1" disabled="disabled"/>
+			    </span>
+			</td>
+			<td><span id="idLockedAxis" style="display:none;">Rotation axis: <span id="idLockedAxisDirection">000</span><button id="idUnlock" type="button" onclick="unlockAxis();" class="button" >unlock</button></span></td>
+		    </tr>
+
+		    </table>
+
+	</div>
+	<div id="idInfo_toggle">hide info</div>
+	<div id="idPermanentLink_div" ></div>
+    </div>
+
+
+<div id="idTopRightCorner">
+    <div id="idViews" class="gradient">Maps</div>
+    <div id="idSettings" class="gradient">Settings</div>
+    <div id="idHelp" class="gradient">?</div>
+</div>
+
+<div id="idDialogs">
+
+    <div id="idViewsDialog" class="gradient" hidden >
+	<table>
+	    <tr><td><input id="idOSMap_checkbox" type="checkbox"></td><td>Open Street maps</td></tr>
+	</table>
+    </div>
+
+    <div id="idSettingsDialog" class="gradient" hidden >
+	<div title="Enable Edit Mode">
+	    
+	</div>
+
+	<div>
+	    <table style="padding:0px">
+	    <tr id="idSettingsEdit_tip"          ><td>Edit Mode         </td><td><input type="checkbox"               id="idSettingsEdit" disabled></td></tr>
+	    <!--<tr id="idSettingsProto_tip"         ><td>KML prototype</td><td><input type="text" class=input_field id="idSettingsProto" /></td></tr>-->
+	    <!--<tr id="idSettingsProto_tip"><td>KML prototypes list</td><td><div id="kml_proto_list" class="list"></div></td></tr>-->
+	    <!--<tr id="idSettingsKml_tip"           ><td>KML file          </td><td><input type="text" class=input_field id="idSettingsKml" /></td></tr>-->
+	    <!--<tr id="idSettingsMask_tip"          ><td>KML mask file     </td><td><input type="text" class=input_field id="idSettingsMask" /></td></tr>-->
+	    <!--<tr id="idSettingsMask_tip"><td>KML masks list</td><td><div id="kml_mask_list" class="list"></div></td></tr>-->
+	    <!--<tr id="idSettingsMap_tip"           ><td>Map build/display </td><td><div id="idSettingsMap" class="list"></div></td></tr>-->
+	    <tr id="idSettingsView_tip"          ><td>Force View Mode   </td><td><input type="checkbox"               id="idSettingsView"></td></tr>
+	    <tr id="idSettingsStart_tip"         ><td>Start node name   </td><td><input type="text" class=input_field id="idSettingsStart" /></td></tr>
+<!--	    <tr id="idSettingsMap_tip"           ><td>Map build/display </td><td><input type="text" class=input_field id="idSettingsMap" /></td></tr>-->
+	    <tr id="idSettingsRange_tip"         ><td>Nodes range, <span style="font-size:10px;">m</span>       </td><td><input type="text" class=input_field id="idSettingsRange" /></td></tr>
+	    <tr id="idSettingsAsCamera_tip"      ><td>Close icon range, <span style="font-size:10px;">m</span>  </td><td><input type="text" class=input_field id="idSettingsAsCamera" /></td></tr>
+	    <tr id="idSettingsNumTextures_tip"   ><td>Number of textures</td><td><input type="text" class=input_field id="idSettingsNumTextures" disabled /></td></tr>
+	    <tr id="idSettingsLabels_tip"        ><td>Labels            </td><td><input type="checkbox"               id="idSettingsLabels"></td></tr>
+	    <tr id="idSettingsClosestIn2D_tip"   ><td>Closest in 2D     </td><td><input type="checkbox"               id="idSettingsClosestIn2D"></td></tr>
+	    <tr id="idSettingsKeepZoom_tip"      ><td>Keep zoom         </td><td><input type="checkbox"               id="idSettingsKeepZoom"></td></tr>
+	    <tr id="idSettingsSeeThrough_tip"    ><td>See through       </td><td><input type="text" class=input_field id="idSettingsSeeThrough" /></td></tr>
+	    <tr id="idSettingsTransitionTime_tip"><td>Transition time   </td><td><input type="text" class=input_field id="idSettingsTransitionTime" /></td></tr>
+	    <tr id="idSettingsFollow_tip"        ><td>Follow            </td><td><input type="checkbox"               id="idSettingsFollow"></td></tr>
+	    <!--<tr><td>Visibility3d      </td><td><input type="checkbox"               id="idSettingsVisibility3d"></td></tr>-->
+	    <tr id="idSettingsMarkVisibility3d_tip"><td>MarkVisibility3d  </td><td><input type="checkbox"               id="idSettingsMarkVisibility3d"></td></tr>
+	    <tr id="idDisplayKML_tip"><td><a id="idShowKML">Show current route's KML file</a></td></tr>
+    <!--	<tr><td>Transition steps  </td><td><input type="text" class=input_field id="idSettingsTransitionSteps" /></td></tr>-->
+	   <!-- <tr id="idSettingsPlan_tip"><td><b>Plan:</b></td></tr>
+	    <tr id="idSettingsDotSize_tip">
+		<td>Dot size, <span style="font-size:10px;">px</span></td>
+		<td><input type="text" class=input_field id="idSettingsDotSize" /></td>
+	    </tr>
+	    <tr id="idSettingsThisColor_tip">
+		<td>This color</td>
+		<td>
+		    <table style="padding:0px">
+			<tr>
+			    <td><input type="text" class=input_field id="idSettingsThisColor" /></td>
+			    <td><div id="idSettingsThisColorSample" class=small_square ></div></td>
+			</tr>
+		    </table>
+		</td>
+	    </tr>
+	    <tr id="idSettingsColor_tip">
+		<td>Color</td>
+		<td>
+		    <table>
+			<tr>
+			    <td><input type="text" class=input_field id="idSettingsColor" /></td>
+			    <td><div id="idSettingsColorSample" class=small_square ></div></td>
+			</tr>
+		     </table>
+		</td>
+	    </tr>
+	    <tr id="idSettingsSelectedColor_tip">
+		<td>Selected color</td>
+		<td>
+		    <table>
+			<tr>
+			    <td><input type="text" class=input_field id="idSettingsSelectedColor" /></td>
+			    <td><div id="idSettingsSelectedColorSample" class=small_square ></div></td>
+			</tr>
+		    </table>
+		</td>
+	    </tr>
+	    <tr id="idSettingsGhostColor_tip">
+		<td>Ghost color</td>
+		<td>
+		    <table>
+			<tr>	
+			    <td><input type="text" class=input_field id="idSettingsGhostColor" /></td>
+			    <td><div id="idSettingsGhostColorSample" class=small_square ></div></td>
+			</tr>
+		    </table>
+		 </td>
+	    </tr>
+	    <tr id="idSettingsInvisibleColor_tip">
+		<td>Invisible color   </td>
+		<td>
+		    <table>
+			<tr>
+			    <td><input type="text" class=input_field id="idSettingsInvisibleColor" /></td>
+			    <td><div id="idSettingsInvisibleColorSample" class=small_square ></div></td>
+			</tr>
+		    </table>
+		</td>
+	    </tr>-->
+	    </table>
+	</div>
+
+	<div>
+	    <div id="idSettingsDialogOkButton" class="button" style="margin:2px;" >Apply</div>
+	    <div id="idSettingsDialogCancelButton" class="button" style="margin:2px;" >Cancel</div>
+	</div>
+    </div>
+
+</div>
+
+<div id="idHelpDialog" class="gradient" hidden >
+    <div><b style='font-size:16px;'>View Mode</b></div>
+    <div id="idViewMode_Controls"></div><br/>
+    <div><b style='font-size:16px;'>Edit Mode</b></div>
+    <div id="idEditMode_Controls"></div>
+</div>
+
+<div id="error_no_webgl" hidden></div>
+
+<div id="all_wrap">
+    <div id="osmap_wrap">
+      <div id="osmap_div" class="gradient"><div id="osmap"></div></div>
+    </div>
+</div>
+
+<div id=status style="font-size:60px;position:absolute;padding:20px;width:200px;height:80px;" ></div>
+
+<script>
+    $('#error_no_webgl').css({background:'white', position:'absolute',top:'600px',left:'600px', padding:'50px'});
+    $('#error_no_webgl').html("Could not initialise WebGL. Please, check the <a href='http://www.khronos.org/webgl/wiki/Getting_a_WebGL_Implementation'>supported browsers</a>.");
+</script>
+
+<!--oleg-->
+<script>
+
+    parseURL();
+    applySettings();
+    //resize();    
+
+</script>
+
+<script>
+    var zoom = 13;
+
+    var currentPosition;
+    var osm_CurrentMarker;
+
+    var marker;
+
+    var loading_intvl;
+    pre_loading_blink();
+    //loading_intvl=setInterval("loading_blink()",1000);
+
+    var map_flag = 0;
+    var osmap_flag = 0;
+    var info_flag = 0;
+
+    translate_request("en");
+
+    $("#idInfo_toggle").click();
+
+    if (!no_connection) {
+	    osm_init();
+	    initialize_maps();
+    }else{
+	    $("#idOSMap_checkbox").attr("disabled",true);
+	    $("#idOSMap_checkbox").attr("checked",false);
+	    $("#idViews").hide();
+	    webGLStart();
+    }
+    if (!$("#idOSMap_checkbox").attr("checked")) $("#osmap_div").hide();
+
+</script>
+
+</body>
+</html>
